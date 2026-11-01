@@ -1,208 +1,172 @@
-/* Εμφάνιση του προγράμματος ΑΣΕΠ */
-
+/* =============================================================
+   ΣΤΟΧΟΣ — ASEP Practice | Visual identity v1
+   Pure CSS redesign. All quiz logic and data remain unchanged.
+   ============================================================= */
+:root {
+  color-scheme: light;
+  --ink: #17263a;
+  --ink-soft: #44576b;
+  --muted: #68798c;
+  --navy: #122c43;
+  --navy-dark: #0b2033;
+  --teal: #087e80;
+  --teal-deep: #08696b;
+  --aqua: #35b5ad;
+  --sand: #f8b978;
+  --canvas: #f4f7f8;
+  --paper: #fff;
+  --line: #dce5e9;
+  --positive: #167a57;
+  --negative: #b94050;
+  --shadow: 0 26px 75px rgba(13, 36, 54, .11), 0 3px 16px rgba(13,36,54,.045);
+}
+* { box-sizing: border-box; }
+html { min-height: 100%; }
 body {
-    font-family:system-ui,Arial;
-    background:#f3f6fb;
-    color:#192a40;
-    margin:0
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(ellipse 85% 38% at 95% 0%, rgba(44, 172, 171, .14), transparent 70%),
+    radial-gradient(ellipse 55% 40% at 0% 92%, rgba(248,185,120,.12), transparent 70%),
+    linear-gradient(145deg,#f6f9f9 0%,#edf2f4 100%);
 }
-
-
-main {
-    max-width:780px;
-    margin:40px auto;
-    padding:20px
-}
-
-
+main { max-width: 920px; margin: 44px auto 64px; padding: 0 24px; }
 .panel {
-    background:white;
-    padding:30px;
-    border-radius:18px;
-    box-shadow:0 6px 30px #1b365010
+  overflow: hidden;
+  position: relative;
+  background: var(--paper);
+  border: 1px solid rgba(220,229,233,.95);
+  border-radius: 24px;
+  padding: 40px 46px 46px;
+  box-shadow: var(--shadow);
+  min-height: 360px;
 }
-
-
-h1 {
-    margin-top:0;
-    color:#173f72
+/* Lightweight CSS-only logo/brand bar, with no extra HTML or image. */
+.panel::before {
+  content: "◈   Σ Τ Ο Χ Ο Σ     /     ASEP  PREP";
+  display: block;
+  margin: -40px -46px 36px;
+  padding: 19px 46px 18px;
+  background: linear-gradient(112deg, var(--navy-dark), var(--navy) 69%, #195b66);
+  border-bottom: 3px solid var(--aqua);
+  color: #eaf7f6;
+  font-size: .73rem;
+  letter-spacing: .16em;
+  font-weight: 800;
+  line-height: 1.35;
 }
-
-
-button,select {
-    font:inherit
-}
-
-
+h1, h2, h3 { line-height: 1.24; letter-spacing: -.028em; }
+h1 { color: var(--navy); font-size: clamp(1.7rem,3.8vw,2.4rem); font-weight: 820; margin: 0 0 13px; }
+h2 { color: var(--navy); font-size: clamp(1.18rem,2.7vw,1.5rem); margin: 28px 0 16px; font-weight: 760; }
+h3 { font-size: 1.07rem; margin: 28px 0 12px; color: var(--navy); }
+p { margin: 10px 0; }
+.muted { color: var(--muted); font-size: .945rem; }
+label:not(.answer) { display: inline-block; font-weight: 720; color: var(--navy); margin: 7px 0 2px; }
+button, select { font: inherit; }
 button {
-    cursor:pointer;
-    border:0;
-    border-radius:10px;
-    padding:13px 19px;
-    background:#1765b3;
-    color:white;
-    font-weight:600
+  appearance: none;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 47px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: linear-gradient(120deg, #087d80, #086a70);
+  color: #fff;
+  font-weight: 720;
+  line-height: 1.25;
+  box-shadow: 0 5px 14px rgba(8, 105, 107, .17);
+  transition: background-color .18s, transform .18s, box-shadow .18s, border-color .18s;
 }
-
-
-button:disabled {
-    opacity:.45;
-    cursor:not-allowed
-}
-
-
-.secondary {
-    background:#e8eef5;
-    color:#173f72
-}
-
-
-.answer {
-    display:block;
-    border:1px solid #d7e0ed;
-    padding:14px;
-    margin:12px 0;
-    border-radius:10px;
-    cursor:pointer
-}
-
-
-.answer:has(input:checked) {
-    border-color:#1765b3;
-    background:#edf5ff
-}
-
-
-.answer input {
-    margin-right:12px
-}
-
-
+button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 9px 22px rgba(8,105,107,.22); }
+button:active:not(:disabled) { transform: translateY(0); }
+button:focus-visible, select:focus-visible, input:focus-visible, .answer:focus-within { outline: 3px solid rgba(24,167,166,.43); outline-offset: 3px; }
+button:disabled { opacity: .46; cursor: not-allowed; box-shadow: none; }
+button.secondary { background: #edf3f5; color: var(--navy); border-color: #d9e5e8; box-shadow: none; }
+button.secondary:hover:not(:disabled) { background: #dfecef; box-shadow: 0 5px 13px rgba(18,44,67,.08); }
+button.study-button { background: linear-gradient(120deg, #1f435b, #142f45); box-shadow: 0 5px 16px rgba(18,44,67,.17); }
+button.study-button:hover:not(:disabled) { box-shadow: 0 9px 21px rgba(18,44,67,.22); }
+.mode-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 22px 0 28px; }
+.mode-grid button { min-height: 78px; font-size: 1rem; padding: 18px 16px; border-radius: 16px; }
+.section-divider { border: 0; height: 1px; background: linear-gradient(90deg,transparent,#c7d9dd 12%,#c7d9dd 88%,transparent); margin: 36px 0; }
 select {
-    padding:12px;
-    width:100%;
-    margin:10px 0 22px;
-    border:1px solid #ccd5e0;
-    border-radius:9px
+  display: block; width: 100%; min-height: 49px;
+  margin: 10px 0 22px; padding: 12px 42px 12px 15px;
+  color: var(--ink); border: 1px solid #cddce1;
+  border-radius: 11px; background: #fff; cursor: pointer;
+  box-shadow: 0 2px 7px rgba(18,44,67,.025);
 }
-
-
-.muted {
-    color:#60738a
+.answer {
+  display: flex; align-items: flex-start;
+  border: 1.5px solid var(--line);
+  padding: 16px 18px; margin: 11px 0;
+  border-radius: 13px; cursor: pointer;
+  background: #fff;
+  transition: border-color .15s, background .15s, box-shadow .15s;
 }
-
-
-.bar {
-    height:8px;
-    background:#e7edf5;
-    border-radius:9px;
-    margin:20px 0
+.answer:hover { border-color: #9fc8c9; background: #f8fcfc; }
+.answer:has(input:checked) { border-color: var(--teal); background: #ebf8f6; box-shadow: inset 4px 0 0 var(--teal); }
+.answer input { flex: 0 0 auto; accent-color: var(--teal); margin: 5px 13px 0 0; width: 17px; height: 17px; }
+.bar { height: 9px; background: #e7eff1; border-radius: 999px; margin: 18px 0 27px; overflow: hidden; }
+.fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--teal),#46c7b8); transition: width .25s ease; }
+.actions { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-top: 28px; }
+.actions button { max-width: 100%; }
+.review { border-bottom: 1px solid var(--line); padding: 18px 4px; }
+.good { color: var(--positive); font-weight: 700; }
+.bad { color: var(--negative); font-weight: 700; }
+.study-answer { cursor: default; }
+.study-answer input { accent-color: var(--positive); }
+.study-answer.correct-answer { background: #eaf8f1; border: 2px solid #239a73; color: #185e48; }
+.correct-label { display: inline-block; margin-left: 8px; color: var(--positive); font-weight: 800; }
+.home-link { margin-top: 27px; }
+#study-start,#study-jump { margin-bottom: 13px; }
+/* Non-verbal puzzles: preserve clean neutral drawing surfaces. */
+.inductive-sequence,.inductive-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 11px; margin: 19px 0 27px; }
+.inductive-frame { min-width: 0; }
+.inductive-frame svg,.inductive-option svg { display: block; width: 100%; height: auto; }
+.inductive-option {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; min-width: 0; min-height: 0;
+  padding: 10px 8px; border: 2px solid #d4e1e5;
+  border-radius: 13px; background: #fff; color: var(--ink);
+  box-shadow: 0 2px 8px rgba(18,44,67,.035);
 }
-
-
-.fill {
-    height:100%;
-    background:#1765b3;
-    border-radius:9px
+.inductive-option:hover:not(:disabled) { border-color: var(--aqua); background: #f5fbfb; }
+.inductive-option strong { font-size: 1.05rem; font-weight: 800; }
+.inductive-option.selected { border-color: var(--teal); background: #eaf8f6; box-shadow: 0 0 0 2px rgba(8,126,128,.12); }
+.inductive-option.correct { border-color: var(--positive); background: #e7f7ef; }
+.inductive-option.incorrect { border-color: var(--negative); background: #fff0f1; }
+.inductive-option:disabled { opacity: 1; cursor: default; }
+.inductive-feedback { margin-top: 18px; background: #f4f8f9; border-radius: 12px; padding: 17px 19px; }
+.inductive-success { border-left: 4px solid var(--positive); }
+.inductive-error { border-left: 4px solid var(--negative); }
+.inductive-sequence.inductive-matrix { grid-template-columns: repeat(3,minmax(0,1fr)); max-width: 540px; gap: 6px; margin: 17px auto 25px; }
+.inductive-sequence.inductive-matrix-four { grid-template-columns: repeat(4,minmax(0,1fr)); max-width: 640px; gap: 6px; margin: 17px auto 25px; }
+.inductive-matrix .inductive-frame,.inductive-matrix-four .inductive-frame { min-width: 0; }
+.inductive-matrix svg,.inductive-matrix-four svg { width: 100%; height: auto; display: block; }
+@media(max-width:650px) {
+  main { margin: 14px auto 34px; padding: 0 11px; }
+  .panel { padding: 25px 19px 32px; border-radius: 18px; }
+  .panel::before { margin: -25px -19px 25px; padding: 16px 19px; font-size: .64rem; letter-spacing: .09em; }
+  .inductive-sequence,.inductive-options { gap: 5px; }
+  .inductive-option { padding: 5px 3px; gap: 4px; border-radius: 8px; }
+  .inductive-option strong { font-size: .9rem; }
+  .actions { flex-wrap: wrap; }
+  .actions button { flex: 1 1 120px; }
 }
-
-
-.actions {
-    display:flex;
-    gap:10px;
-    justify-content:space-between;
-    margin-top:22px
+@media(max-width:420px) {
+  .mode-grid { grid-template-columns: 1fr; gap: 10px; }
+  .mode-grid button { min-height: 64px; }
+  .panel { padding-left: 15px; padding-right: 15px; }
+  .panel::before { margin-left: -15px; margin-right: -15px; padding-left: 15px; }
+  .inductive-option { border-width: 1.5px; }
 }
-
-
-.review {
-    padding:12px;
-    border-bottom:1px solid #eee
-}
-
-
-.good {
-    color:#087b46
-}
-
-
-.bad {
-    color:#b32635
-}
-
-/* -------------------- Αρχική οθόνη -------------------- */
-
-.mode-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin: 24px 0;
-}
-
-.study-button {
-    background: #16734b;
-}
-
-/* -------------------- Λειτουργία εκμάθησης -------------------- */
-
-.study-answer {
-    cursor: default;
-}
-
-.study-answer input {
-    accent-color: #16804d;
-}
-
-.study-answer.correct-answer {
-    background: #e5f6eb;
-    border: 2px solid #16804d;
-    color: #135b37;
-}
-
-.correct-label {
-    display: inline-block;
-    margin-left: 8px;
-    font-weight: 700;
-    color: #137347;
-}
-
-.home-link {
-    margin-top: 25px;
-}
-
-@media (max-width: 480px) {
-    .mode-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-/* Επιλογή αρχικής ερώτησης και μετάβαση κατά την εκμάθηση. */
-#study-start,
-#study-jump {
-    margin-bottom: 12px;
-}
-
-
-/* -------------------- Επαγωγικός συλλογισμός (SVG) -------------------- */
-.section-divider {border:0;border-top:1px solid #e0e7f0;margin:26px 0}
-.inductive-sequence,.inductive-options {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0 25px}
-.inductive-frame svg,.inductive-option svg {width:100%;height:auto;display:block}
-.inductive-option {display:flex;flex-direction:column;align-items:center;gap:8px;background:#fff;color:#24344a;border:2px solid #d6dfec;padding:8px;border-radius:10px;min-width:0}
-.inductive-option strong {font-size:1.1rem}
-.inductive-option.selected {border-color:#1765b3;background:#edf5ff}
-.inductive-option.correct {border-color:#16804d;background:#e5f6eb}
-.inductive-option.incorrect {border-color:#b32635;background:#ffeded}
-.inductive-option:disabled {opacity:1;cursor:default}
-.inductive-feedback {padding:14px;border-radius:10px;margin-top:16px;background:#f3f6fb}
-.inductive-success {border-left:4px solid #16804d}
-.inductive-error {border-left:4px solid #b32635}
-@media(max-width:540px){.inductive-sequence,.inductive-options{gap:4px}.inductive-option{padding:4px;border-radius:6px}.panel{padding:16px}main{padding:8px;margin:12px auto}}
-
-.inductive-sequence.inductive-matrix {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:540px;margin:14px auto;gap:5px}
-.inductive-matrix .inductive-frame {min-width:0}
-.inductive-matrix svg {display:block;width:100%;height:auto}
-
-/* Πίνακας τεσσάρων στηλών, αντίστοιχος με το δεύτερο παράδειγμα του PDF. */
-.inductive-sequence.inductive-matrix-four {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));max-width:640px;margin:14px auto;gap:5px}
-.inductive-matrix-four .inductive-frame {min-width:0}
-.inductive-matrix-four svg {display:block;width:100%;height:auto}
+@media(prefers-reduced-motion:reduce) { *,*::before,*::after { transition: none !important; scroll-behavior: auto !important; } }

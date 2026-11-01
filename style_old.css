@@ -1,0 +1,208 @@
+/* Εμφάνιση του προγράμματος ΑΣΕΠ */
+
+body {
+    font-family:system-ui,Arial;
+    background:#f3f6fb;
+    color:#192a40;
+    margin:0
+}
+
+
+main {
+    max-width:780px;
+    margin:40px auto;
+    padding:20px
+}
+
+
+.panel {
+    background:white;
+    padding:30px;
+    border-radius:18px;
+    box-shadow:0 6px 30px #1b365010
+}
+
+
+h1 {
+    margin-top:0;
+    color:#173f72
+}
+
+
+button,select {
+    font:inherit
+}
+
+
+button {
+    cursor:pointer;
+    border:0;
+    border-radius:10px;
+    padding:13px 19px;
+    background:#1765b3;
+    color:white;
+    font-weight:600
+}
+
+
+button:disabled {
+    opacity:.45;
+    cursor:not-allowed
+}
+
+
+.secondary {
+    background:#e8eef5;
+    color:#173f72
+}
+
+
+.answer {
+    display:block;
+    border:1px solid #d7e0ed;
+    padding:14px;
+    margin:12px 0;
+    border-radius:10px;
+    cursor:pointer
+}
+
+
+.answer:has(input:checked) {
+    border-color:#1765b3;
+    background:#edf5ff
+}
+
+
+.answer input {
+    margin-right:12px
+}
+
+
+select {
+    padding:12px;
+    width:100%;
+    margin:10px 0 22px;
+    border:1px solid #ccd5e0;
+    border-radius:9px
+}
+
+
+.muted {
+    color:#60738a
+}
+
+
+.bar {
+    height:8px;
+    background:#e7edf5;
+    border-radius:9px;
+    margin:20px 0
+}
+
+
+.fill {
+    height:100%;
+    background:#1765b3;
+    border-radius:9px
+}
+
+
+.actions {
+    display:flex;
+    gap:10px;
+    justify-content:space-between;
+    margin-top:22px
+}
+
+
+.review {
+    padding:12px;
+    border-bottom:1px solid #eee
+}
+
+
+.good {
+    color:#087b46
+}
+
+
+.bad {
+    color:#b32635
+}
+
+/* -------------------- Αρχική οθόνη -------------------- */
+
+.mode-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 24px 0;
+}
+
+.study-button {
+    background: #16734b;
+}
+
+/* -------------------- Λειτουργία εκμάθησης -------------------- */
+
+.study-answer {
+    cursor: default;
+}
+
+.study-answer input {
+    accent-color: #16804d;
+}
+
+.study-answer.correct-answer {
+    background: #e5f6eb;
+    border: 2px solid #16804d;
+    color: #135b37;
+}
+
+.correct-label {
+    display: inline-block;
+    margin-left: 8px;
+    font-weight: 700;
+    color: #137347;
+}
+
+.home-link {
+    margin-top: 25px;
+}
+
+@media (max-width: 480px) {
+    .mode-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Επιλογή αρχικής ερώτησης και μετάβαση κατά την εκμάθηση. */
+#study-start,
+#study-jump {
+    margin-bottom: 12px;
+}
+
+
+/* -------------------- Επαγωγικός συλλογισμός (SVG) -------------------- */
+.section-divider {border:0;border-top:1px solid #e0e7f0;margin:26px 0}
+.inductive-sequence,.inductive-options {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0 25px}
+.inductive-frame svg,.inductive-option svg {width:100%;height:auto;display:block}
+.inductive-option {display:flex;flex-direction:column;align-items:center;gap:8px;background:#fff;color:#24344a;border:2px solid #d6dfec;padding:8px;border-radius:10px;min-width:0}
+.inductive-option strong {font-size:1.1rem}
+.inductive-option.selected {border-color:#1765b3;background:#edf5ff}
+.inductive-option.correct {border-color:#16804d;background:#e5f6eb}
+.inductive-option.incorrect {border-color:#b32635;background:#ffeded}
+.inductive-option:disabled {opacity:1;cursor:default}
+.inductive-feedback {padding:14px;border-radius:10px;margin-top:16px;background:#f3f6fb}
+.inductive-success {border-left:4px solid #16804d}
+.inductive-error {border-left:4px solid #b32635}
+@media(max-width:540px){.inductive-sequence,.inductive-options{gap:4px}.inductive-option{padding:4px;border-radius:6px}.panel{padding:16px}main{padding:8px;margin:12px auto}}
+
+.inductive-sequence.inductive-matrix {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:540px;margin:14px auto;gap:5px}
+.inductive-matrix .inductive-frame {min-width:0}
+.inductive-matrix svg {display:block;width:100%;height:auto}
+
+/* Πίνακας τεσσάρων στηλών, αντίστοιχος με το δεύτερο παράδειγμα του PDF. */
+.inductive-sequence.inductive-matrix-four {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));max-width:640px;margin:14px auto;gap:5px}
+.inductive-matrix-four .inductive-frame {min-width:0}
+.inductive-matrix-four svg {display:block;width:100%;height:auto}

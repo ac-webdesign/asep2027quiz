@@ -181,3 +181,28 @@ select {
 #study-jump {
     margin-bottom: 12px;
 }
+
+
+/* -------------------- Επαγωγικός συλλογισμός (SVG) -------------------- */
+.section-divider {border:0;border-top:1px solid #e0e7f0;margin:26px 0}
+.inductive-sequence,.inductive-options {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0 25px}
+.inductive-frame svg,.inductive-option svg {width:100%;height:auto;display:block}
+.inductive-option {display:flex;flex-direction:column;align-items:center;gap:8px;background:#fff;color:#24344a;border:2px solid #d6dfec;padding:8px;border-radius:10px;min-width:0}
+.inductive-option strong {font-size:1.1rem}
+.inductive-option.selected {border-color:#1765b3;background:#edf5ff}
+.inductive-option.correct {border-color:#16804d;background:#e5f6eb}
+.inductive-option.incorrect {border-color:#b32635;background:#ffeded}
+.inductive-option:disabled {opacity:1;cursor:default}
+.inductive-feedback {padding:14px;border-radius:10px;margin-top:16px;background:#f3f6fb}
+.inductive-success {border-left:4px solid #16804d}
+.inductive-error {border-left:4px solid #b32635}
+@media(max-width:540px){.inductive-sequence,.inductive-options{gap:4px}.inductive-option{padding:4px;border-radius:6px}.panel{padding:16px}main{padding:8px;margin:12px auto}}
+
+.inductive-sequence.inductive-matrix {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));max-width:540px;margin:14px auto;gap:5px}
+.inductive-matrix .inductive-frame {min-width:0}
+.inductive-matrix svg {display:block;width:100%;height:auto}
+
+/* Πίνακας τεσσάρων στηλών, αντίστοιχος με το δεύτερο παράδειγμα του PDF. */
+.inductive-sequence.inductive-matrix-four {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));max-width:640px;margin:14px auto;gap:5px}
+.inductive-matrix-four .inductive-frame {min-width:0}
+.inductive-matrix-four svg {display:block;width:100%;height:auto}

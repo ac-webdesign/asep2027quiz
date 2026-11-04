@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed(uid) {
+      return request.auth != null && request.auth.uid == uid
+        && request.auth.token.email_verified == true;
+    }
+
+    match /users/{uid} {
+      allow get: if signed(uid);
+      allow list: if false;
+
+      // Δημιουργία προφίλ μόνο με 0 τεστ, μετά από πραγματική επαλήθευση email.
+      allow create: if signed(uid)
+        && request.resource.data.keys().hasOnly(['started', 'createdAt'])
+        && request.resource.data.keys().hasAll(['started', 'createdAt'])
+        && request.resource.data.started == 0
+        && request.resource.data.createdAt == request.time;
+
+      // Μόνο αύξηση κατά 1, το πολύ μέχρι τα 3 τεστ.
+      // Δεν επιτρέπονται μείωση/reset ή αλλαγή πεδίων από τον χρήστη.
+      allow update: if signed(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['started'])
+        && resource.data.started is int
+        && resource.data.started >= 0
+        && resource.data.started < 3
+        && request.resource.data.started == resource.data.started + 1;
+      allow delete: if false;
+
+      match /results/{resultId} {
+        allow get, list: if signed(uid);
+        allow create: if signed(uid)
+          && request.resource.data.keys().hasOnly(['type', 'correct', 'total', 'at'])
+          && request.resource.data.keys().hasAll(['type', 'correct', 'total', 'at'])
+          && request.resource.data.type in ['knowledge', 'inductive']
+          && request.resource.data.correct is int
+          && request.resource.data.total is int
+          && request.resource.data.total > 0
+          && request.resource.data.total <= 25
+          && request.resource.data.correct >= 0
+          && request.resource.data.correct <= request.resource.data.total
+          && request.resource.data.at == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // Μελλοντικές συνδρομές: ΜΟΝΟ έμπιστο backend/Admin SDK.
+    match /entitlements/{uid} {
+      allow read: if signed(uid);
+      allow write: if false;
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

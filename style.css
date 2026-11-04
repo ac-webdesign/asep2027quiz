@@ -907,3 +907,73 @@ body {
     gap: 8px;
   }
 }
+
+
+/* =============================================================
+   Συνδρομές / Freemium preview. Δεν περιλαμβάνει billing ή login.
+   ============================================================= */
+.preview-warning { margin:0 0 17px; padding:10px 13px; border:1px solid #e9c782; border-radius:10px; background:#fff9eb; color:#80531d; font-size:.82rem; font-weight:750; }
+.access-strip { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:0 0 22px; padding:19px 22px; background:#edf6f5; border:1px solid #cbe5e1; border-radius:16px; }
+.access-label { color:#0d7573; letter-spacing:.1em; font-weight:830; font-size:.67rem; }
+.access-strip p { margin:4px 0 0; }
+.access-strip p strong { font-size:1rem; color:#133b4a; }
+.access-strip p.muted { font-size:.76rem; max-width:420px; }
+.access-actions { display:flex; flex-direction:column; flex:0 0 auto; gap:7px; }
+.access-actions button { box-shadow:none; font-size:.78rem; min-height:38px; padding:8px 12px; }
+.plans-heading { max-width:610px; margin-bottom:20px; }
+.plans-heading h1 { margin-top:7px; }
+.plans-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:22px 0 14px; }
+.plan-card { display:flex; flex-direction:column; gap:0; border:1px solid #dbe5e9; border-radius:17px; padding:20px 16px 16px; background:#fff; min-width:0; }
+.plan-card.featured { border:2px solid #0b8280; background:linear-gradient(180deg,#f1fbfa 0%,#fff 48%); padding:19px 15px 15px; }
+.plan-highlight { display:inline-flex; align-self:flex-start; background:#d3efe8; color:#0b6964; padding:5px 9px; border-radius:20px; font-size:.65rem; font-weight:790; margin:0 0 12px; }
+.plan-name { font-size:.85rem; font-weight:790; color:#1e4354; margin:0 0 7px; }
+.plan-price { font-size:1.8rem; font-weight:840; line-height:1.15; letter-spacing:-.05em; margin:0; color:#122d44; white-space:nowrap; }
+.plan-price span { font-weight:610; font-size:.70rem; letter-spacing:0; white-space:normal; }
+.plan-period { color:#677b87; font-size:.73rem; min-height:37px; margin:9px 0 12px; }
+.plan-card ul { padding:0; margin:0 0 18px; list-style:none; display:grid; gap:10px; flex:1; }
+.plan-card li { padding-left:21px; position:relative; font-size:.79rem; line-height:1.36; }
+.plan-card li::before { content:'✓'; position:absolute; left:0; color:#0b8580; font-weight:900; }
+.plan-action { display:block; width:100%; font-size:.77rem; padding:11px 10px; box-shadow:none; }
+.pricing-fineprint { color:#647584; font-size:.72rem; line-height:1.5; margin:15px 0 22px; }
+.plans-message { background:#edf6f5; border-left:3px solid #087f7e; padding:12px 14px; border-radius:8px; color:#1d5760; font-size:.83rem; }
+.preview-tools { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+.preview-tools button { font-size:.77rem; box-shadow:none; }
+.payment-notice { max-width:630px; margin:0 auto; }
+.insight-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:20px 0; }
+.insight-summary div { display:flex; flex-direction:column; gap:2px; padding:19px; background:#eff8f6; border:1px solid #cfe9e3; border-radius:14px; }
+.insight-summary strong { font-size:1.8rem; font-weight:840; color:#146d68; }
+.insight-summary span { color:#4f626c; font-size:.79rem; }
+.insight-list { display:grid; gap:9px; }
+.insight-row { display:grid; grid-template-columns:minmax(125px,1fr) minmax(90px,1.15fr) 48px; align-items:center; gap:12px; padding:12px 14px; border:1px solid #dfe6e9; border-radius:12px; }
+.insight-row span { font-weight:750; font-size:.80rem; }
+.insight-row span small { display:block; color:#72818d; font-weight:500; font-size:.69rem; }
+.insight-row strong { font-size:.84rem; text-align:right; }
+.insight-progress { height:7px; border-radius:99px; overflow:hidden; background:#e2eaeb; }
+.insight-progress div { height:100%; background:#11908a; }
+@media(max-width:800px) { .plans-grid { grid-template-columns:1fr; } .plan-card { min-height:0; } .plan-card ul { margin-bottom:15px; } .plan-period { min-height:0; } .plan-price { font-size:1.7rem; } }
+@media(max-width:650px) { .access-strip { flex-direction:column; align-items:stretch; gap:12px; padding:14px; margin-bottom:16px; } .access-actions { flex-direction:row; } .access-actions button { flex:1; min-width:0; } .plan-card { padding:16px 15px; } .plan-card.featured { padding:15px 14px; } .plan-price { font-size:1.55rem; } .plans-heading h1 { font-size:1.48rem; } .insight-row { grid-template-columns:1fr 1fr 38px; gap:7px; padding:11px; } .preview-tools { flex-direction:column; } }
+
+
+/* Firebase: οθόνη σύνδεσης και επισκέπτης */
+.auth-panel { max-width:520px; margin:0 auto; padding:8px 2px 22px; }
+.auth-brand { display:flex; align-items:center; gap:10px; font-size:1.45rem; font-weight:850; color:var(--navy); letter-spacing:.07em; margin:4px 0 24px; }
+.auth-glyph { color:#087f7d; font-size:2rem; line-height:1; }
+.auth-panel h1 { font-size:clamp(1.6rem,4vw,2rem); margin:8px 0 11px; }
+.auth-buttons { display:grid; gap:10px; margin:27px 0 15px; }
+.auth-buttons button { width:100%; }
+.auth-buttons input { width:100%; height:48px; padding:12px 13px; border-radius:10px; border:1px solid #cbd9df; font:inherit; background:white; }
+.auth-buttons label { margin:3px 0 -7px; }
+.auth-google { background:#fff; color:#244358; border:1px solid #cfdce2; box-shadow:none; }
+.auth-google::before { content:'G'; font-weight:900; color:#4285f4; margin-right:12px; font-size:1.17rem; }
+.auth-separator { text-align:center; font-size:.82rem; color:#8c9ba6; padding:9px; }
+.auth-text-action { display:inline-flex; background:transparent; color:#087f7d; box-shadow:none; font-weight:760; border:none; min-height:36px; }
+.auth-divider { height:1px; background:#e1e9ed; margin:8px 0; }
+.auth-disclaimer { text-align:center; color:#71818e; font-size:.78rem; line-height:1.5; }
+.auth-guest-notice { display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:#f1f7f9; border:1px solid #dbe9ec; border-radius:13px; padding:12px 16px; margin:0 0 16px; }
+.auth-guest-notice strong { color:#24495c; }
+.auth-guest-notice span { color:#627686; font-size:.8rem; flex:1 1 180px; }
+.auth-guest-notice button { min-height:36px; padding:7px 12px; font-size:.8rem; }
+.auth-user-strip { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin:0 0 17px; }
+.auth-user-strip span { color:#667987; font-size:.77rem; overflow-wrap:anywhere; }
+.auth-user-strip button { padding:6px 10px; min-height:32px; font-size:.75rem; }
+@media(max-width:650px){.auth-panel { padding:4px 0 12px; }.auth-brand { font-size:1.27rem; margin:0 0 20px; }.auth-buttons { margin-top:19px; }.auth-guest-notice { align-items:stretch; flex-direction:column; gap:7px; }.auth-guest-notice button { width:100%; } }

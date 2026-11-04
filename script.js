@@ -55,29 +55,56 @@ function categoryOptions() {
     `;
 }
 
-// Αρχική οθόνη με τις δύο λειτουργίες.
+// Αρχική οθόνη — ΣΤΟΧΟΣ. Οι ενέργειες διατηρούν τις υπάρχουσες λειτουργίες.
 function home() {
     const categoryCount = new Set(BANK.map((question) => question.category)).size;
+    const knowledgeCount = BANK.length.toLocaleString("el-GR");
+    const inductiveCount = INDUCTIVE_QUESTIONS.length.toLocaleString("el-GR");
 
     app.innerHTML = `
-        <h1>ΑΣΕΠ · Προσωπική εξάσκηση</h1>
-        <p class="muted">${BANK.length} ερωτήσεις · ${categoryCount} κατηγορίες</p>
+        <div class="home-dashboard home-dashboard-minimal">
+            <header class="home-intro home-intro-minimal">
+                <p class="home-kicker">ΑΣΕΠ • Προσωπική εξάσκηση</p>
+                <h2>Προετοιμασία για τον 3ο γραπτό διαγωνισμό ΑΣΕΠ 2027</h2>
+                <p class="home-lead">Γνώσεις και επαγωγικός συλλογισμός σε μία εφαρμογή.</p>
+                <div class="home-meta-row">
+                    <span class="home-meta-pill">${knowledgeCount} + ${inductiveCount} ερωτήσεις</span>
+                    <span class="home-meta-pill">2 ενότητες</span>
+                </div>
+            </header>
 
-        <h2>Μέρος 1 · Ερωτήσεις γνώσεων</h2>
-        <div class="mode-grid">
-            <button onclick="selectMode('test')">Τεστ γνώσεων</button>
-            <button class="study-button" onclick="selectMode('study')">Εκμάθηση γνώσεων</button>
-        </div>
-        <hr class="section-divider">
-        <h2>Μέρος 2 · Επαγωγικός Συλλογισμός</h2>
-        <p class="muted">${INDUCTIVE_QUESTIONS.length} ερωτήσεις · 10 προβλεπόμενα επίπεδα δυσκολίας · διανυσματικά σχήματα SVG</p>
-        <div class="mode-grid">
-            <button onclick="inductiveMenu('test')">Τεστ σχημάτων</button>
-            <button class="study-button" onclick="inductiveMenu('study')">Εκμάθηση σχημάτων</button>
-        </div>
+            <section class="home-course home-course-knowledge" aria-labelledby="home-knowledge-title">
+                <div class="home-course-top">
+                    <span class="home-course-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><path d="M4 5.5C7.2 4.5 9.6 5.2 12 7.2c2.4-2 4.8-2.7 8-1.7v13c-3.2-1-5.6-.3-8 1.7-2.4-2-4.8-2.7-8-1.7z"/><path d="M12 7.2v13"/></svg>
+                    </span>
+                    <span class="home-course-index">ΓΝΩΣΕΙΣ</span>
+                </div>
+                <h2 id="home-knowledge-title">Ερωτήσεις γνώσεων</h2>
+                <p class="home-course-desc">Μελέτη και εξάσκηση στη βασική ύλη.</p>
+                <div class="home-metrics"><span>${knowledgeCount} ερωτήσεις</span><i></i><span>${categoryCount} κατηγορίες</span></div>
+                <div class="home-course-actions">
+                    <button class="home-primary-action" onclick="selectMode('test')">Τεστ</button>
+                    <button class="home-outline-action" onclick="selectMode('study')">Εκμάθηση</button>
+                </div>
+            </section>
 
-        <p class="muted">Τεστ: 25 τυχαίες ερωτήσεις και βαθμολογία.</p>
-        <p class="muted">Εκμάθηση: όλες οι ερωτήσεις με τη σωστή απάντηση εμφανή.</p>
+            <section class="home-course home-course-inductive" aria-labelledby="home-inductive-title">
+                <div class="home-course-top">
+                    <span class="home-course-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><circle cx="17.5" cy="6.5" r="3"/><path d="m6.5 14-3.5 6h7z"/><rect x="14.5" y="14.5" width="6" height="6" rx="1"/></svg>
+                    </span>
+                    <span class="home-course-index">ΣΥΛΛΟΓΙΣΜΟΣ</span>
+                </div>
+                <h2 id="home-inductive-title">Επαγωγικός συλλογισμός</h2>
+                <p class="home-course-desc">Μοτίβα, σχέσεις και λογικοί κανόνες.</p>
+                <div class="home-metrics"><span>${inductiveCount} ερωτήσεις</span><i></i><span>10 επίπεδα</span></div>
+                <div class="home-course-actions">
+                    <button class="home-primary-action" onclick="inductiveMenu('test')">Τεστ</button>
+                    <button class="home-outline-action" onclick="inductiveMenu('study')">Εκμάθηση</button>
+                </div>
+            </section>
+        </div>
     `;
 }
 

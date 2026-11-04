@@ -287,46 +287,623 @@ select {
 }
 
 /* =============================================================
-   Question & answer rhythm — mobile v4
-   A consistent question-title slot and equal minimum answer-card
-   heights, while long text stays fully visible (never clipped).
+   ΣΤΟΧΟΣ — Unified question presentation, mobile v5
+   Same visual language for short and long text. Flexible card
+   height preserves every word and the correct-answer tick.
    ============================================================= */
 @media (max-width: 650px) {
-  /* Applied only to the knowledge quiz/study screens. */
+  /* Keep the question in a consistent, visually balanced region. */
   #app:has(> .answer) > h2 {
     display: flex;
     align-items: center;
-    min-height: 66px;
-    margin: 9px 0 9px;
-    line-height: 1.27;
+    min-height: 76px;
+    margin: 8px 0 12px;
+    padding: 7px 2px;
+    font-size: 1.065rem;
+    font-weight: 780;
+    line-height: 1.29;
+    letter-spacing: -.018em;
+    text-wrap: pretty;
+    overflow-wrap: break-word;
   }
-  #app > .answer {
-    min-height: 58px;
-    height: auto;
+
+  /* All answer cards start at the same height and use the same
+     internal alignment; longer answers grow rather than clip. */
+  #app > label.answer {
+    position: relative;
+    display: flex;
     align-items: center;
-    margin: 6px 0;
-    padding: 9px 11px;
-    line-height: 1.32;
+    width: 100%;
+    min-height: 53px;
+    height: auto;
+    margin: 7px 0;
+    padding: 11px 12px;
+    border-radius: 11px;
+    border-width: 1px;
+    background: #fff;
+    font-size: .855rem;
+    line-height: 1.37;
+    font-weight: 450;
     overflow-wrap: break-word;
     word-break: normal;
+    box-shadow: 0 1px 2px rgba(13, 36, 54, .025);
   }
-  #app > .answer > input {
+  #app > label.answer > input {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
     align-self: center;
-    margin-top: 0;
+    margin: 0 10px 0 0;
   }
-  #app > .answer > b {
-    white-space: nowrap;
+  #app > label.answer > b {
+    flex: 0 0 auto;
+    align-self: center;
     margin-right: 4px;
+    font-weight: 750;
+    white-space: nowrap;
   }
-  #app > .study-answer.correct-answer {
-    padding-right: 38px;
+
+  /* Right-side check is always on its own line-free track. */
+  #app > label.study-answer.correct-answer {
+    padding: 11px 41px 11px 12px;
+    border: 1.5px solid #168b82;
+    background: #eaf8f5;
+    box-shadow: inset 3px 0 0 #168b82;
+    color: #176a52;
   }
+  #app > label.study-answer .correct-label {
+    position: absolute;
+    top: 50%;
+    right: 11px;
+    width: 20px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    font-size: 0;
+    line-height: 1;
+  }
+  #app > label.study-answer .correct-label::before {
+    content: "✓";
+    font-size: 19px;
+    font-weight: 900;
+  }
+  #app > label.answer:has(input:checked):not(.study-answer) {
+    border-color: var(--teal);
+    background: #effaf8;
+    box-shadow: inset 3px 0 0 var(--teal);
+  }
+  #app > label.answer + label.answer { margin-top: 7px; }
+  #app .actions { margin-top: 16px; }
+  #app .home-link { margin-top: 12px; }
 }
 @media (max-width: 420px) {
-  #app:has(> .answer) > h2 { min-height: 64px; }
-  #app > .answer {
-    min-height: 56px;
-    padding: 8px 10px;
-    margin: 5px 0;
+  #app:has(> .answer) > h2 { min-height: 72px; }
+  #app > label.answer {
+    min-height: 52px;
+    margin: 6px 0;
+    padding: 10px 10px;
+    font-size: .84rem;
+  }
+  #app > label.study-answer.correct-answer {
+    padding: 10px 38px 10px 10px;
+  }
+  #app > label.study-answer .correct-label { right: 9px; }
+}
+@media (max-width: 650px) and (max-height: 740px) {
+  #app:has(> .answer) > h2 { min-height: 66px; }
+  #app > label.answer { min-height: 48px; margin: 5px 0; padding-top: 8px; padding-bottom: 8px; }
+  #app > label.study-answer.correct-answer { padding-top: 8px; padding-bottom: 8px; }
+}
+
+
+/* ============================================================
+   ΣΤΟΧΟΣ / Focus UI v6 — mobile-first exam experience
+   Quiet navy + sea-green. No fixed-height content clipping.
+   ============================================================ */
+:root {
+  --canvas: #f5f7fa;
+  --navy: #102d48;
+  --navy-dark: #0b2238;
+  --teal: #078484;
+  --aqua: #45bdb3;
+  --ink: #1b2a3b;
+  --ink-soft: #47566a;
+  --line: #dce3eb;
+  --positive: #187453;
+  --shadow: 0 13px 38px rgba(20,39,65,.055);
+}
+body {
+  background: #f5f7fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+.panel { box-shadow: var(--shadow); }
+.answer { font-weight: 480; }
+.answer:has(input:checked) { box-shadow: inset 3px 0 0 var(--teal); }
+.study-answer.correct-answer { box-shadow: inset 3px 0 0 var(--positive); }
+.bar { background:#dbe2e9; }
+.fill { background:linear-gradient(90deg,#166ba3,#087e86); }
+
+/* Mobile bottom navigation is real markup, with working app actions. */
+.mobile-nav { display: none; }
+@media (max-width: 650px) {
+  html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  body { font-size: 13px; line-height:1.4; background:#f5f7fa; }
+  main { max-width:550px; padding: 0 11px; margin: 12px auto 0; }
+  .panel {
+    border: 0;
+    border-radius: 18px;
+    box-shadow: 0 4px 19px rgba(20,42,65,.075);
+    padding: 16px 15px 19px;
+    min-height: 0;
+    overflow: visible;
+  }
+  .panel::before {
+    margin: -16px -15px 16px;
+    padding: 12px 15px;
+    font-size: .60rem;
+    letter-spacing:.14em;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 2px solid #36b6ae;
+  }
+  h1 { font-size: 1.32rem; line-height:1.22; margin-bottom:10px; }
+  h2 { font-size:1.08rem; margin:15px 0 10px; line-height:1.35; }
+  h3 { font-size:.98rem; }
+  p { margin: 6px 0; }
+  .muted { font-size:.75rem; line-height:1.43; }
+  label:not(.answer) { font-size:.80rem; margin:6px 0 2px; }
+  select { min-height:42px; padding:9px 33px 9px 11px; margin:5px 0 13px; font-size:.83rem; }
+  .bar { height:5px; margin:12px 0 17px; }
+  /* Consistent question card for short or long prompts. */
+  #app:has(> label.answer) > h2 {
+    display:flex;
+    align-items:center;
+    width:100%;
+    min-height: 102px;
+    margin: 18px 0 18px;
+    padding: 18px 16px;
+    background:#fff;
+    border:1px solid #d7e0e8;
+    border-left:3px solid #078484;
+    border-radius:15px;
+    color:var(--navy);
+    font-weight:720;
+    font-size:1.02rem;
+    line-height:1.47;
+    box-shadow: 0 3px 12px rgba(16,45,72,.035);
+    overflow-wrap:normal;
+    text-wrap:pretty;
+  }
+  /* Answer text is allowed to grow, while the letter-badge stays aligned. */
+  #app > label.answer {
+    display:grid;
+    grid-template-columns:42px minmax(0,1fr);
+    align-items:center;
+    column-gap:13px;
+    min-height:57px;
+    height:auto;
+    margin:8px 0;
+    padding:10px 13px 10px 10px;
+    border-radius:13px;
+    border:1px solid #d9e2ea;
+    background:#fff;
+    font-size:.84rem;
+    line-height:1.44;
+    font-weight:520;
+    box-shadow: 0 1px 2px rgba(16,45,72,.02);
+    overflow-wrap:break-word;
+    word-break:normal;
+  }
+  #app > label.answer > input {
+    position:absolute;
+    width:1px;
+    height:1px;
+    margin:0;
+    opacity:0;
+    pointer-events:none;
+  }
+  #app > label.answer > b {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:40px;
+    min-height:38px;
+    padding:5px;
+    border:1px solid #d3dce5;
+    border-radius:10px;
+    background:#f7f9fb;
+    color:#20374e;
+    font-weight:780;
+    font-size:.89rem;
+    white-space:nowrap;
+    margin:0;
+  }
+  #app > label.answer:has(input:checked) {
+    border-color:#0e8887;
+    box-shadow:inset 3px 0 0 #0e8887;
+    background:#edf9f7;
+  }
+  #app > label.answer:has(input:checked) > b {
+    background:#dff3ef;
+    border-color:#8ac9c0;
+    color:#0b6d6a;
+  }
+  #app > label.study-answer.correct-answer {
+    grid-template-columns:42px minmax(0,1fr) 18px;
+    column-gap:12px;
+    padding:10px 12px 10px 10px;
+    background:#edf9f3;
+    border:1.5px solid #61b49b;
+    box-shadow:inset 3px 0 0 #188265;
+    color:#1e6752;
+  }
+  #app > label.study-answer.correct-answer > b {
+    background:#def3e8;
+    border-color:#9bcdb8;
+    color:#156e51;
+  }
+  #app > label.study-answer .correct-label {
+    position:static;
+    grid-column:3;
+    transform:none;
+    width:19px;
+    height:22px;
+    margin:0;
+    justify-content:center;
+    color:#187453;
+    font-size:0;
+  }
+  #app > label.study-answer .correct-label::before { font-size:18px; }
+  .actions { gap:9px; margin-top:17px; flex-wrap:wrap; }
+  .actions button,button {
+    min-height:43px;
+    padding:10px 13px;
+    font-size:.83rem;
+    border-radius:10px;
+  }
+  .home-link { margin:14px 0 0; }
+  /* Crisp, accessible bottom navigation for mobile devices. */
+  body { padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px)); }
+  .mobile-nav {
+    position:fixed;
+    z-index:50;
+    left:0; right:0; bottom:0;
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    padding:7px max(6px,env(safe-area-inset-right,0px)) calc(7px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px));
+    background:rgba(255,255,255,.97);
+    border-top:1px solid #d7e0e8;
+    box-shadow:0 -5px 18px rgba(16,45,72,.06);
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+  }
+  .mobile-nav button {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    width:100%;
+    min-height:56px;
+    padding:5px 1px;
+    border:0;
+    border-radius:9px;
+    background:transparent;
+    box-shadow:none;
+    color:#667589;
+    font-size:9px;
+    font-weight:690;
+    line-height:1.2;
+    white-space:normal;
+    text-align:center;
+    transition:color .15s, background .15s;
+  }
+  .mobile-nav button:hover, .mobile-nav button:focus-visible {
+    background:#eef6f6; color:var(--teal); transform:none; box-shadow:none;
+  }
+  .mobile-nav button.is-active { color:#086f79; background:#edf7f5; }
+  .mobile-nav svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+  .inductive-sequence,.inductive-options { margin:14px 0 20px; }
+}
+@media (max-width: 390px) {
+  main { padding:0 8px; }
+  .panel { padding:13px 12px 17px; }
+  .panel::before { margin:-13px -12px 13px; padding:11px 12px; }
+  #app:has(> label.answer) > h2 { min-height:90px; padding:15px 13px; font-size:.96rem; }
+  #app > label.answer { grid-template-columns:37px minmax(0,1fr); gap:10px; font-size:.805rem; padding:8px; }
+  #app > label.answer > b { width:36px; min-height:35px; font-size:.84rem; }
+  #app > label.study-answer.correct-answer { grid-template-columns:37px minmax(0,1fr) 17px; column-gap:9px; }
+  .mobile-nav button { font-size:8.3px; }
+}
+@media (min-width:651px) { .mobile-nav { display:none; } }
+
+/* ============================================================
+   ΣΤΟΧΟΣ / HOME 02 — minimal mobile-first dashboard
+   Scoped to .home-dashboard so tests and study stay unchanged.
+   ============================================================ */
+.home-dashboard { max-width: 720px; margin:0 auto; }
+.home-intro { padding: 3px 0 24px; }
+.home-eyebrow { display:flex; align-items:center; gap:9px; color:#0b797b; font-weight:800; letter-spacing:.14em; font-size:10px; }
+.home-eyebrow-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#19a6a0; box-shadow:0 0 0 4px rgba(25,166,160,.10); }
+.home-intro h1 { font-size:clamp(29px,5vw,43px); line-height:1.15; letter-spacing:-.044em; font-weight:800; margin:17px 0 13px; color:#153149; }
+.home-intro h1 span { color:#108486; }
+.home-lead { color:#788593; font-size:14px; line-height:1.6; margin:0; }
+.home-library-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0 15px; color:#42576a; font-size:11px; font-weight:800; letter-spacing:.12em; }
+.home-library-count { color:#9ca9b5; letter-spacing:0; font-weight:650; font-size:11px; }
+.home-course { position:relative; padding:26px 28px 24px; margin:0 0 15px; border:1px solid #e0e9ec; background:#fff; border-radius:19px; box-shadow:0 7px 23px rgba(15,43,59,.045); }
+.home-course-top { display:flex; align-items:center; justify-content:space-between; }
+.home-course-icon { display:flex; align-items:center; justify-content:center; border-radius:12px; height:44px; width:44px; background:#e9f6f4; color:#087f7d; }
+.home-course-icon svg { width:23px; height:23px; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; fill:none; }
+.home-course-index { font-size:10px; letter-spacing:.12em; color:#8a99a5; font-weight:800; }
+.home-course h2 { font-size:clamp(18px,2.7vw,22px); letter-spacing:-.026em; margin:16px 0 7px; font-weight:780; line-height:1.3; }
+.home-course-desc { margin:0 0 16px; color:#788795; font-size:13px; line-height:1.5; }
+.home-metrics { display:flex; align-items:center; flex-wrap:wrap; gap:10px; color:#4c6373; font-size:12px; font-weight:650; margin:0 0 23px; }
+.home-metrics i { display:block; width:3px; height:3px; background:#b8c4c9; border-radius:50%; }
+.home-course-actions { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:10px; }
+.home-course .home-course-actions button { margin:0; min-width:0; min-height:48px; padding:12px 12px; font-size:13px; font-weight:750; border-radius:11px; box-shadow:none; }
+.home-course .home-primary-action { background:#0a7d7e; color:white; justify-content:space-between; padding-left:19px!important; padding-right:17px!important; }
+.home-course .home-primary-action span { font-size:19px; line-height:0; font-weight:400; }
+.home-course .home-outline-action { background:#f3f7f8; color:#17374b; border:1px solid #e3ecee; }
+.home-course .home-course-actions button:hover { transform:translateY(-1px); box-shadow:0 6px 14px rgba(16,56,67,.08); }
+.home-course-inductive .home-course-icon { background:#eaf0f8; color:#244e72; }
+.home-course-inductive .home-primary-action { background:#173a55; }
+.home-footnote { color:#9ba7ad; text-align:center; font-size:12px; font-weight:620; margin:23px 0 3px; }
+.home-footnote span { color:#0c8787; font-size:17px; margin-right:5px; }
+@media(max-width:650px) {
+  .panel:has(.home-dashboard) { padding:19px 17px 22px; }
+  .panel:has(.home-dashboard)::before { margin:-19px -17px 22px; }
+  .home-intro { padding:0 3px 23px; }
+  .home-intro h1 { font-size:30px; margin:13px 0 10px; }
+  .home-lead { font-size:12.5px; }
+  .home-library-heading { margin:2px 3px 12px; font-size:10px; }
+  .home-course { padding:19px 18px 18px; margin-bottom:12px; border-radius:16px; }
+  .home-course-icon { height:39px; width:39px; border-radius:11px; }
+  .home-course-icon svg { width:21px; height:21px; }
+  .home-course-index { font-size:9px; }
+  .home-course h2 { font-size:18px; margin:12px 0 6px; }
+  .home-course-desc { font-size:12px; margin-bottom:11px; }
+  .home-metrics { font-size:11px; gap:8px; margin-bottom:16px; }
+  .home-course .home-course-actions button { min-height:44px; font-size:12px; }
+  .home-footnote { margin:16px 0 0; font-size:11px; }
+}
+@media(max-width:390px) {
+  .panel:has(.home-dashboard) { padding:15px 13px 18px; }
+  .panel:has(.home-dashboard)::before { margin:-15px -13px 19px; }
+  .home-intro h1 { font-size:27px; }
+  .home-course { padding:16px 15px; }
+  .home-course .home-course-actions button { font-size:11.5px; }
+}
+
+
+/* =============================================================
+   Home refresh — cleaner landing page + stronger brand header
+   ============================================================= */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+
+body {
+  font-family: "Manrope", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.panel::before {
+  font-size: .82rem;
+  letter-spacing: .28em;
+  font-weight: 800;
+  padding-top: 18px;
+  padding-bottom: 16px;
+}
+
+.home-dashboard-minimal {
+  max-width: 700px;
+}
+
+.home-intro-minimal {
+  padding: 4px 2px 18px;
+}
+
+.home-kicker {
+  margin: 0 0 10px;
+  color: #6a7b89;
+  font-size: .86rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.home-intro-minimal h1 {
+  margin: 0 0 8px;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  line-height: 1.08;
+  letter-spacing: -.05em;
+  color: var(--navy);
+}
+
+.home-intro-minimal .home-lead {
+  margin: 0;
+  color: #718293;
+  font-size: .95rem;
+  line-height: 1.55;
+}
+
+.home-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.home-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f4f8f9;
+  border: 1px solid #e3ecef;
+  color: #4e6170;
+  font-size: .82rem;
+  font-weight: 700;
+}
+
+.home-course {
+  padding: 22px 22px 20px;
+  border-radius: 18px;
+  border: 1px solid #e3eaee;
+  box-shadow: 0 10px 28px rgba(15,43,59,.04);
+}
+
+.home-course-top {
+  margin-bottom: 2px;
+}
+
+.home-course-index {
+  font-size: .74rem;
+  letter-spacing: .12em;
+}
+
+.home-course h2 {
+  margin: 14px 0 6px;
+  font-size: 1.38rem;
+  letter-spacing: -.03em;
+}
+
+.home-course-desc {
+  margin: 0 0 12px;
+  font-size: .9rem;
+  color: #728290;
+}
+
+.home-metrics {
+  margin: 0 0 16px;
+  font-size: .82rem;
+  color: #526677;
+}
+
+.home-course-actions {
+  grid-template-columns: repeat(2, minmax(0,1fr));
+}
+
+.home-course .home-course-actions button {
+  min-height: 46px;
+  border-radius: 12px;
+  font-size: .92rem;
+  font-weight: 760;
+}
+
+.home-course .home-primary-action {
+  justify-content: center;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+.home-course .home-primary-action span {
+  display: none;
+}
+
+@media (max-width: 650px) {
+  .panel:has(.home-dashboard) {
+    padding: 16px 14px 18px;
+  }
+
+  .panel:has(.home-dashboard)::before {
+    margin: -16px -14px 18px;
+    font-size: .74rem;
+    letter-spacing: .22em;
+    padding-top: 14px;
+    padding-bottom: 13px;
+  }
+
+  .home-intro-minimal {
+    padding: 2px 1px 14px;
+  }
+
+  .home-kicker {
+    margin-bottom: 8px;
+    font-size: .78rem;
+  }
+
+  .home-intro-minimal h1 {
+    font-size: 1.9rem;
+    margin-bottom: 7px;
+  }
+
+  .home-intro-minimal .home-lead {
+    font-size: .82rem;
+  }
+
+  .home-meta-row {
+    margin-top: 12px;
+    gap: 8px;
+  }
+
+  .home-meta-pill {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: .74rem;
+  }
+
+  .home-course {
+    padding: 18px 16px 16px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+  }
+
+  .home-course-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .home-course-icon svg {
+    width: 21px;
+    height: 21px;
+  }
+
+  .home-course-index {
+    font-size: .68rem;
+    letter-spacing: .11em;
+  }
+
+  .home-course h2 {
+    margin: 12px 0 5px;
+    font-size: 1.16rem;
+  }
+
+  .home-course-desc {
+    margin-bottom: 10px;
+    font-size: .81rem;
+  }
+
+  .home-metrics {
+    gap: 8px;
+    margin-bottom: 14px;
+    font-size: .74rem;
+  }
+
+  .home-course .home-course-actions button {
+    min-height: 42px;
+    font-size: .82rem;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .panel:has(.home-dashboard) {
+    padding: 14px 12px 17px;
+  }
+
+  .panel:has(.home-dashboard)::before {
+    margin: -14px -12px 16px;
+    font-size: .7rem;
+    letter-spacing: .18em;
+  }
+
+  .home-intro-minimal h1 {
+    font-size: 1.72rem;
+  }
+
+  .home-course-actions {
+    gap: 8px;
   }
 }

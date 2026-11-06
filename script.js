@@ -121,9 +121,9 @@ async function discardStudy(kind) {
 
 
 // -------------------- FIREBASE AUTHENTICATION / FREEMIUM --------------------
-// Η ελάχιστη πρόσβαση (3 τεστ) τηρείται στο Firestore και ελέγχεται από κανόνες.
+// Η ελάχιστη πρόσβαση (5 τεστ) τηρείται στο Firestore και ελέγχεται από κανόνες.
 // Δεν υπάρχει πραγματικό Premium ή λειτουργία παράκαμψης ορίων στην έκδοση αυτή.
-const FREE_TEST_LIMIT = 3;
+const FREE_TEST_LIMIT = 5;
 let authReady = false;
 let currentUser = null;
 let guestBrowsing = false;

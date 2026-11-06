@@ -56,12 +56,14 @@ service cloud.firestore {
       allow update: if signed(uid)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['started'])
         && resource.data.started is int
-        && resource.data.started >= 0 && resource.data.started < 3
+        && resource.data.started >= 0 && resource.data.started < 5
         && request.resource.data.started == resource.data.started + 1
         && (
           (resource.data.started == 0 && !exists(/databases/$(database)/documents/users/$(uid)/results/completed-1) && existsAfter(/databases/$(database)/documents/users/$(uid)/results/completed-1))
           || (resource.data.started == 1 && !exists(/databases/$(database)/documents/users/$(uid)/results/completed-2) && existsAfter(/databases/$(database)/documents/users/$(uid)/results/completed-2))
           || (resource.data.started == 2 && !exists(/databases/$(database)/documents/users/$(uid)/results/completed-3) && existsAfter(/databases/$(database)/documents/users/$(uid)/results/completed-3))
+          || (resource.data.started == 3 && !exists(/databases/$(database)/documents/users/$(uid)/results/completed-4) && existsAfter(/databases/$(database)/documents/users/$(uid)/results/completed-4))
+          || (resource.data.started == 4 && !exists(/databases/$(database)/documents/users/$(uid)/results/completed-5) && existsAfter(/databases/$(database)/documents/users/$(uid)/results/completed-5))
         );
       allow delete: if false;
 
@@ -89,7 +91,7 @@ service cloud.firestore {
         allow get: if attemptDoc == 'current' && signed(uid);
         allow list: if false;
         allow create: if attemptDoc == 'current' && signed(uid) && attemptValid()
-          && (premium(uid) || (get(profilePath(uid)).data.started is int && get(profilePath(uid)).data.started < 3));
+          && (premium(uid) || (get(profilePath(uid)).data.started is int && get(profilePath(uid)).data.started < 5));
         // Συνέχιση ίδιας προσπάθειας ή αντικατάσταση από "Νέο τεστ".
         // Αλλαγή ID επιτρέπεται μόνο με διαθέσιμη δωρεάν πρόσβαση ή Premium.
         allow update: if attemptDoc == 'current' && signed(uid) && attemptValid()
@@ -97,7 +99,7 @@ service cloud.firestore {
                 && request.resource.data.type == resource.data.type)
               || (request.resource.data.id != resource.data.id
                 && (premium(uid) || (get(profilePath(uid)).data.started is int
-                  && get(profilePath(uid)).data.started < 3))));
+                  && get(profilePath(uid)).data.started < 5))));
         allow delete: if attemptDoc == 'current' && signed(uid);
       }
       match /results/{resultId} {
@@ -113,10 +115,12 @@ service cloud.firestore {
             ||
             (((get(profilePath(uid)).data.started == 0 && resultId == 'completed-1')
                 || (get(profilePath(uid)).data.started == 1 && resultId == 'completed-2')
-                || (get(profilePath(uid)).data.started == 2 && resultId == 'completed-3'))
+                || (get(profilePath(uid)).data.started == 2 && resultId == 'completed-3')
+                || (get(profilePath(uid)).data.started == 3 && resultId == 'completed-4')
+                || (get(profilePath(uid)).data.started == 4 && resultId == 'completed-5'))
               && get(profilePath(uid)).data.started is int
               && get(profilePath(uid)).data.started >= 0
-              && get(profilePath(uid)).data.started < 3
+              && get(profilePath(uid)).data.started < 5
               && getAfter(profilePath(uid)).data.started == get(profilePath(uid)).data.started + 1)
           );
         allow update, delete: if false;

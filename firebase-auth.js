@@ -32,7 +32,7 @@ let offAttempt = null;
 let offStudyKnowledge = null;
 let offStudyInductive = null;
 let tokenVersion = 0;
-const limitFreeTests = 3;
+const limitFreeTests = 5;
 
 async function ensureProfile(user) {
   const ref = doc(db, 'users', user.uid);

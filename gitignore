@@ -1,0 +1,27 @@
+# Installed dependencies (recreated with npm ci)
+node_modules/
+**/node_modules/
+
+# Firebase local state and logs
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+
+# Local secrets and environment overrides
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.local
+
+# Editor / OS files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Build and archive outputs
+*.zip

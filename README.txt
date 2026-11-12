@@ -1,46 +1,37 @@
-ΣΤΟΧΟΣ / ΑΣΕΠ — Firebase Authentication: αποκλειστικά σύνδεση/εγγραφή μέσω Google.
+ΣΤΟΧΟΣ — Βήμα 2: Firebase Cloud Functions (ασφαλής βάση, χωρίς πληρωμές)
 
-ΤΙ ΕΧΕΙ ΥΛΟΠΟΙΗΘΕΙ
-• Firebase Authentication: αποκλειστικά σύνδεση/εγγραφή μέσω Google.
-• Αρχική οθόνη σύνδεσης. "Συνέχεια ως επισκέπτης": περιήγηση στις ενότητες και στα πακέτα.
-• Για Τεστ, Εκμάθηση, Σχήματα και Πρόοδο απαιτείται συνδεδεμένος/επαληθευμένος λογαριασμός.
-• Ασφαλής μετρητής 3 συνολικών ενάρξεων τεστ Γνώσεων + Σχημάτων, σε Firestore (transaction + rules).
-• Αποτελέσματα τεστ αποθηκεύονται στο Firestore για τον συνδεδεμένο χρήστη και προβάλλονται στην "Πρόοδό μου".
-• Εμφάνιση 3 πακέτων. ΔΕΝ υπάρχουν ακόμη πραγματικές πληρωμές, Premium ή Google Play Billing.
-• Τα δύο αρχεία ερωτήσεων δεν έχουν τροποποιηθεί.
+ΠΕΡΙΕΧΟΜΕΝΑ
+firebase.json
+functions/package.json
+functions/index.txt  (μετονόμασέ το σε index.js πριν από την εγκατάσταση)
 
-ΑΠΑΡΑΙΤΗΤΗ ΡΥΘΜΙΣΗ ΣΤΟ FIREBASE (ΠΡΙΝ ΔΟΚΙΜΗ)
-1. Firebase Console → stoxos-asep → Firestore Database → Rules.
-2. Αντικατάστησε τους υπάρχοντες κανόνες ΜΕ ΟΛΟ το περιεχόμενο του firestore.rules.
-3. Πάτησε Publish. ΧΩΡΙΣ αυτούς τους κανόνες, η δημιουργία προφίλ ή οι δοκιμές δεν θα λειτουργούν.
-4. Authentication → Sign-in method: Email/Password και Google ενεργά (το έχεις ήδη κάνει).
-5. Authentication → Settings → Authorized domains: πρόσθεσε localhost για τοπικές δοκιμές.
-   Σε projects που δημιουργήθηκαν μετά τις 28/04/2025 το localhost ΔΕΝ προστίθεται αυτόματα.
-   Μην το διατηρήσεις σε production αν δεν απαιτείται.
+ΑΠΑΙΤΗΣΕΙΣ
+- Node.js 22 και Firebase CLI στον υπολογιστή.
+- Firebase project: stoxos-asep, με Blaze.
+- Αποθήκευσε αυτά τα αρχεία στον κύριο φάκελο του project, με τη δομή που φαίνεται παραπάνω.
+- Μην αντικαταστήσεις τυχόν υπάρχον firebase.json χωρίς να ελέγξουμε πρώτα τη συγχώνευση ρυθμίσεων.
 
-ΠΩΣ ΤΟ ΤΡΕΧΕΙΣ
-• Μην ανοίγεις index.html με διπλό κλικ (file://). Χρησιμοποίησε HTTP server.
-• Σε υπολογιστή με Python: άνοιξε τερματικό ΜΕΣΑ στον φάκελο και τρέξε:
-    python -m http.server 8000
-  Έπειτα άνοιξε http://localhost:8000
-• Απαιτείται Internet για τα Firebase JavaScript SDK modules.
-• Στα Google sign-in popups επιτρέπονται από τον browser. Στο τελικό Android/Capacitor
-  θα χρειαστεί προσαρμογή/δοκιμή του OAuth (πιθανώς native plugin).
-• Πρώτη εγγραφή email: άνοιξε το email επαλήθευσης και μετά "Επαλήθευσα το email".
-• Κάθε έναρξη τεστ καταναλώνει 1 από τα 3 (ακόμη κι αν διακοπεί).
+ΕΝΤΟΛΕΣ (από τον κύριο φάκελο project)
+  npm install -g firebase-tools
+  firebase login
+  firebase use stoxos-asep
+  cd functions
+  npm install
+  npm run check
+  cd ..
+  firebase deploy --only functions:billing
 
-ΑΣΦΑΛΕΙΑ / ΠΡΙΝ ΤΗ ΔΗΜΟΣΙΕΥΣΗ
-• Οι κανόνες Firestore εμποδίζουν reset και 4η έναρξη μέσω της δημόσιας εφαρμογής.
-• Ο κώδικας ερωτήσεων παραμένει σε δημόσια JavaScript αρχεία και μπορεί να διαβαστεί
-  με τεχνικά μέσα ΧΩΡΙΣ σύνδεση. Για πραγματικό paywall απαιτείται προστατευμένη
-  παράδοση ερωτήσεων από backend και server-side premium entitlement.
-• Η δωρεάν ποσόστωση είναι ανά Firebase λογαριασμό, όχι εγγυημένα ανά φυσικό πρόσωπο.
-• Οι πελάτες μπορούν να καταγράψουν αυθαίρετα αποτελέσματα (τα αποτελέσματα είναι
-  προσωπικά, όχι βαθμολογίες επίσημου διαγωνισμού).
-• Δεν υπάρχει εξαγωγή/διαγραφή λογαριασμού, GDPR πολιτική ή billing: πρόσθεσε πριν τη δημοσίευση.
-• Για Android: Google Play Billing + έλεγχος από server + ανανέωση/ακύρωση + App Check.
-• Η δημοσίευση κανόνων στο Firestore επηρεάζει όλο το συγκεκριμένο project.
+ΤΙ ΚΑΝΕΙ
+- Δημοσιεύει την callable function getSubscriptionStatus στην περιοχή europe-west1.
+- Απαιτεί Firebase Authentication.
+- Διαβάζει μόνο τη δική του συνδρομή (UID από verified Firebase token).
+- Δεν δημιουργεί συνδρομές, δεν γράφει στο Firestore, δεν χρεώνει χρήστες.
+- Το Premium συνεχίζει να ελέγχεται από την υπάρχουσα συλλογή entitlements.
 
-ΑΡΧΕΙΑ
-index.html, style.css, script.js, questions.js, inductive-questions.js,
-firebase-auth.js, firestore.rules
+ΠΡΙΝ ΑΠΟ ΠΡΑΓΜΑΤΙΚΕΣ ΠΛΗΡΩΜΕΣ
+Χρειάζονται Stripe test keys/prices, Google Play setup, webhooks, έλεγχοι
+συνδρομών, προστασία idempotency, ακυρώσεις, επιστροφές, App Check,
+Firestore emulator tests και έλεγχος τιμολόγησης/νομικών όρων.
+
+ΠΡΟΣΟΧΗ: Η εγκατάσταση Cloud Functions ενδέχεται να δημιουργήσει χρεώσεις
+στο Blaze. Οι ειδοποιήσεις budget δεν αποτελούν hard spending cap.

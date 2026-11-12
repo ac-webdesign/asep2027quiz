@@ -1,0 +1,13 @@
+{
+  "name": "stoxos-billing-functions",
+  "private": true,
+  "version": "0.1.0",
+  "description": "STOXOS subscription backend foundation (no billing yet)",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "scripts": { "check": "node --check index.js" },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0"
+  }
+}

@@ -56,11 +56,12 @@ function studyBanner() {
         const record=savedStudies[kind];
         const title=kind==='knowledge'?'Εκμάθηση γνώσεων':'Εκμάθηση σχημάτων';
         const position=kind==='knowledge'?`Ερώτηση #${escapeHtml(record.questionId)}`:`Ερώτηση ${record.total+1}`;
-        return `<section class="access-strip" aria-label="Αποθηκευμένη εκμάθηση"><div>
-            <span class="access-label">ΑΠΟΘΗΚΕΥΜΕΝΗ ΕΚΜΑΘΗΣΗ</span><p><strong>${title}</strong></p>
-            <p class="muted">${position} · Συνέχισε από εκεί που σταμάτησες.</p></div>
-            <div class="access-actions"><button onclick="resumeStudy('${kind}')">Συνέχεια εκμάθησης</button>
-            <button class="secondary" onclick="discardStudy('${kind}')">Διαγραφή προόδου</button></div></section>`;
+        return `<section class="access-strip access-strip-compact" aria-label="Αποθηκευμένη εκμάθηση">
+            <div class="access-compact-info"><span class="access-label">ΣΥΝΕΧΕΙΑ ΕΚΜΑΘΗΣΗΣ</span>
+            <strong>${title}</strong><span class="access-compact-meta">${position}</span></div>
+            <div class="access-actions"><button onclick="resumeStudy('${kind}')">Συνέχεια</button>
+            <button class="secondary access-delete" onclick="discardStudy('${kind}')" title="Διαγραφή προόδου" aria-label="Διαγραφή προόδου ${title}">✕</button></div>
+        </section>`;
     }).join('');
 }
 async function resumeStudy(kind) {
@@ -127,7 +128,6 @@ const FREE_TEST_LIMIT = 5;
 let authReady = false;
 let currentUser = null;
 let guestBrowsing = false;
-let authRegistration = false;
 let startedTests = 0;
 let cloudHistory = [];
 let cloudHistoryLoaded = false;
@@ -177,7 +177,12 @@ function resumeBanner() {
     if (!authIdentity() || !savedAttempt) return '';
     const name = savedAttempt.type === 'knowledge' ? 'Τεστ γνώσεων' : 'Τεστ σχημάτων';
     const n = savedAttempt.type === 'knowledge' ? Math.min(25,(savedAttempt.position||0)+1) : Math.min(18,(savedAttempt.total||0)+1);
-    return `<section class="access-strip" aria-label="Ημιτελές τεστ"><div><span class="access-label">ΑΠΟΘΗΚΕΥΜΕΝΟ ΤΕΣΤ</span><p><strong>${name}</strong></p><p class="muted">Συνέχεια από την ερώτηση ${n}. Η προσπάθεια είναι αποθηκευμένη στον λογαριασμό σου.</p></div><div class="access-actions"><button onclick="resumeSavedTest()">Συνέχεια τεστ</button><button class="secondary" onclick="discardSavedTest()">Διαγραφή προσπάθειας</button></div></section>`;
+    return `<section class="access-strip access-strip-compact" aria-label="Ημιτελές τεστ">
+        <div class="access-compact-info"><span class="access-label">ΣΥΝΕΧΕΙΑ ΤΕΣΤ</span>
+        <strong>${name}</strong><span class="access-compact-meta">Ερώτηση ${n}</span></div>
+        <div class="access-actions"><button onclick="resumeSavedTest()">Συνέχεια</button>
+        <button class="secondary access-delete" onclick="discardSavedTest()" title="Διαγραφή προσπάθειας" aria-label="Διαγραφή προσπάθειας">✕</button></div>
+    </section>`;
 }
 async function resumeSavedTest() {
     if (!requireAccount() || resumeLoading) return;
@@ -233,7 +238,7 @@ function newTestId() {
 }
 
 function authIdentity() {
-    return currentUser && currentUser.emailVerified ? currentUser : null;
+    return currentUser || null;
 }
 
 // Καλείται από το firebase-auth.js όταν αλλάξει ο πραγματικός λογαριασμός.
@@ -241,8 +246,7 @@ function firebaseAuthChanged(user) {
     const oldUid = currentUser && currentUser.uid;
     authReady = true;
     currentUser = user ? {
-        uid: user.uid, email: user.email || '', displayName: user.displayName || '',
-        emailVerified: !!user.emailVerified
+        uid: user.uid, email: user.email || '', displayName: user.displayName || ''
     } : null;
     if (oldUid !== (currentUser && currentUser.uid)) {
         startedTests = 0;
@@ -261,8 +265,7 @@ function firebaseAuthChanged(user) {
     }
     if (currentUser) {
         guestBrowsing = false;
-        if (currentUser.emailVerified) home();
-        else showEmailVerification();
+        home();
     } else if (guestBrowsing) home();
     else showAuthLanding();
 }
@@ -287,19 +290,13 @@ function firebaseSetupError(message) {
 function guestContinue() { if (authIdentity()) return home(); guestBrowsing = true; home(); }
 function requireAccount(message = 'Για να ξεκινήσεις τεστ ή εκμάθηση πρέπει να συνδεθείς.') {
     if (authIdentity()) return true;
-    if (currentUser && !currentUser.emailVerified) showEmailVerification();
-    else showAuthLanding(message);
+    showAuthLanding(message);
     return false;
 }
 
 function authErrorText(error) {
     const code = error && error.code;
     const messages = {
-        'auth/email-already-in-use':'Υπάρχει ήδη λογαριασμός με αυτό το email.',
-        'auth/invalid-email':'Η διεύθυνση email δεν είναι έγκυρη.',
-        'auth/weak-password':'Χρησιμοποίησε κωδικό τουλάχιστον 6 χαρακτήρων.',
-        'auth/invalid-credential':'Λάθος email ή κωδικός.',
-        'auth/wrong-password':'Λάθος email ή κωδικός.',
         'auth/popup-closed-by-user':'Έκλεισε το παράθυρο σύνδεσης Google.',
         'auth/popup-blocked':'Το πρόγραμμα περιήγησης απέκλεισε το παράθυρο Google.',
         'auth/unauthorized-domain':'Ο τομέας δεν είναι εγκεκριμένος στο Authentication → Settings → Authorized domains.',
@@ -315,61 +312,22 @@ function showAuthLanding(message = '') {
         <section class="auth-panel">
             <div class="auth-brand"><img class="auth-brand-logo" src="brand-icon.png" alt="" width="51" height="51"><span>ΣΤΟΧΟΣ</span></div>
             <p class="home-kicker">ΑΣΕΠ • Προσωπική εξάσκηση</p>
-            <h1>${authRegistration ? 'Δημιουργία λογαριασμού' : 'Καλώς ήρθες στην προετοιμασία σου'}</h1>
+            <h1>Καλώς ήρθες στην προετοιμασία σου</h1>
             <p class="muted">Ανακάλυψε τα τεστ γνώσεων, τα σχήματα και τα διαθέσιμα πακέτα.</p>
             ${message ? `<p class="plans-message" role="alert">${escapeHtml(message)}</p>` : ''}
             <div class="auth-buttons">
                 <button class="auth-google" onclick="loginWithGoogle()">Συνέχεια με Google</button>
-                <div class="auth-separator">ή με email</div>
-                <label for="auth-email">Email</label>
-                <input id="auth-email" type="email" autocomplete="email" placeholder="email@example.com"/>
-                <label for="auth-password">Κωδικός</label>
-                <input id="auth-password" type="password" minlength="6" autocomplete="${authRegistration ? 'new-password' : 'current-password'}" placeholder="Τουλάχιστον 6 χαρακτήρες"/>
-                <button onclick="loginWithEmail()">${authRegistration ? 'Δημιουργία λογαριασμού' : 'Σύνδεση'}</button>
-                <button class="auth-text-action" onclick="toggleRegistration()">${authRegistration ? 'Έχεις λογαριασμό; Σύνδεση' : 'Δεν έχεις λογαριασμό; Εγγραφή'}</button>
                 <div class="auth-divider"></div>
                 <button class="secondary" onclick="guestContinue()">Συνέχεια ως επισκέπτης</button>
             </div>
-            <p class="auth-disclaimer">Ως επισκέπτης μπορείς να περιηγηθείς στην πλατφόρμα και στα πακέτα. Για τεστ ή εκμάθηση χρειάζεσαι λογαριασμό.</p>
+            <p class="auth-disclaimer">Η σύνδεση και η δημιουργία λογαριασμού γίνονται αποκλειστικά μέσω Google. Ως επισκέπτης μπορείς να περιηγηθείς στην πλατφόρμα και στα πακέτα. Για τεστ ή εκμάθηση χρειάζεσαι λογαριασμό.</p>
         </section>`;
 }
 
-function toggleRegistration() { authRegistration = !authRegistration; showAuthLanding(); }
 async function loginWithGoogle() {
     if (!window.StoxosFirebase) return showAuthLanding('Το Firebase δεν φορτώθηκε ακόμη. Δοκίμασε ξανά.');
     try { await window.StoxosFirebase.loginGoogle(); }
     catch (e) { showAuthLanding(authErrorText(e)); }
-}
-async function loginWithEmail() {
-    const email = document.getElementById('auth-email').value.trim();
-    const password = document.getElementById('auth-password').value;
-    if (!email || !password) return showAuthLanding('Συμπλήρωσε email και κωδικό.');
-    if (!window.StoxosFirebase) return showAuthLanding('Το Firebase δεν φορτώθηκε ακόμη.');
-    try {
-        const register = authRegistration;
-        await window.StoxosFirebase.loginEmail(email, password, register);
-    } catch(e) { showAuthLanding(authErrorText(e)); }
-}
-function showEmailVerification(message = '') {
-    app.innerHTML = `<section class="auth-panel">
-        <p class="home-kicker">ΕΠΑΛΗΘΕΥΣΗ EMAIL</p><h1>Επιβεβαίωσε τη διεύθυνσή σου</h1>
-        <p>Στείλαμε σύνδεσμο επαλήθευσης στο <strong>${escapeHtml((currentUser && currentUser.email) || '')}</strong> εφόσον ολοκλήρωσες την εγγραφή.</p>
-        <p class="muted">Άνοιξε το email και πάτησε τον σύνδεσμο. Έλεγξε και τα ανεπιθύμητα.</p>
-        ${message ? `<p class="plans-message">${escapeHtml(message)}</p>` : ''}
-        <div class="actions"><button onclick="checkVerifiedEmail()">Επαλήθευσα το email</button>
-        <button class="secondary" onclick="resendVerification()">Αποστολή ξανά</button></div>
-        <p><button class="auth-text-action" onclick="logoutStoxos()">Αλλαγή λογαριασμού</button></p>
-    </section>`;
-}
-async function checkVerifiedEmail() {
-    try {
-        const verified = await window.StoxosFirebase.checkEmailVerified();
-        if (!verified) showEmailVerification('Η επαλήθευση δεν ολοκληρώθηκε ακόμη.');
-    } catch(e) { showEmailVerification(authErrorText(e)); }
-}
-async function resendVerification() {
-    try { await window.StoxosFirebase.resendVerification(); showEmailVerification('Στάλθηκε νέο email επαλήθευσης.'); }
-    catch(e) { showEmailVerification(authErrorText(e)); }
 }
 async function logoutStoxos() {
     guestBrowsing = false;
@@ -536,8 +494,7 @@ function categoryOptions() {
 // Αρχική οθόνη — ΣΤΟΧΟΣ. Οι ενέργειες διατηρούν τις υπάρχουσες λειτουργίες.
 function home() {
     if (!authReady && !guestBrowsing) return showAuthLanding();
-    if (currentUser && !currentUser.emailVerified) return showEmailVerification();
-    const categoryCount = new Set(BANK.map((question) => question.category)).size;
+        const categoryCount = new Set(BANK.map((question) => question.category)).size;
     const knowledgeCount = BANK.length.toLocaleString("el-GR");
     const inductiveCount = INDUCTIVE_QUESTIONS.length.toLocaleString("el-GR");
 
@@ -604,6 +561,73 @@ function home() {
     `;
 }
 
+// Κεντρικά μενού πλοήγησης. Οι υπάρχουσες λειτουργίες παραμένουν ίδιες.
+function showActivityMenu(kind) {
+    const isTest = kind === 'test';
+    app.innerHTML = `
+        <section class="activity-menu">
+            <p class="home-kicker">ΣΤΟΧΟΣ • ${isTest ? 'ΕΞΑΣΚΗΣΗ' : 'ΜΕΛΕΤΗ'}</p>
+            <h1>${isTest ? 'Τεστ' : 'Εκμάθηση'}</h1>
+            <p class="muted">Επίλεξε την ενότητα που θέλεις να ${isTest ? 'εξασκηθείς' : 'μελετήσεις'}.</p>
+            <div class="activity-menu-list">
+                <button class="activity-menu-item" onclick="selectMode('${isTest ? 'test' : 'study'}')">
+                    <span class="activity-menu-icon" aria-hidden="true">☷</span>
+                    <span class="activity-menu-copy"><strong>Γνώσεις</strong><small>Ερωτήσεις ανά κατηγορία</small></span>
+                    <span class="activity-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="activity-menu-item" onclick="inductiveMenu('${isTest ? 'test' : 'study'}')">
+                    <span class="activity-menu-icon" aria-hidden="true">◇</span>
+                    <span class="activity-menu-copy"><strong>Σχήματα</strong><small>Επαγωγικός συλλογισμός</small></span>
+                    <span class="activity-menu-arrow" aria-hidden="true">›</span>
+                </button>
+            </div>
+        </section>`;
+}
+
+function showAccount() {
+    if (!authIdentity()) {
+        app.innerHTML = `<section class="account-page">
+            <p class="home-kicker">Ο ΛΟΓΑΡΙΑΣΜΟΣ ΜΟΥ</p>
+            <h1>Λογαριασμός</h1>
+            <p class="muted">Συνδέσου με Google για να δεις την πρόοδο, τα αποτελέσματα και την πρόσβασή σου.</p>
+            <div class="actions"><button onclick="showAuthLanding()">Σύνδεση με Google</button></div>
+        </section>`;
+        return;
+    }
+    const user = authIdentity();
+    const results = accessData().history;
+    const avg = results.length ? Math.round(results.reduce((sum,r)=>sum+100*r.correct/Math.max(1,r.total),0)/results.length) : null;
+    app.innerHTML = `<section class="account-page">
+        <p class="home-kicker">Ο ΛΟΓΑΡΙΑΣΜΟΣ ΜΟΥ</p>
+        <h1>Λογαριασμός</h1>
+        <div class="account-profile">
+            <span class="account-avatar" aria-hidden="true">${escapeHtml((user.displayName || user.email || 'G').trim().charAt(0).toUpperCase())}</span>
+            <div class="account-profile-copy"><strong>${escapeHtml(user.displayName || 'Χρήστης Google')}</strong><small>${escapeHtml(user.email || '')}</small></div>
+        </div>
+        <div class="account-stats">
+            <div><strong>${results.length}</strong><span>Ολοκληρωμένα τεστ</span></div>
+            <div><strong>${avg === null ? '—' : avg + '%'}</strong><span>Μέση επίδοση</span></div>
+        </div>
+        <div class="account-links">
+            <button class="activity-menu-item" onclick="showInsights()"><span class="activity-menu-copy"><strong>Η πρόοδός μου</strong><small>Αποτελέσματα και επιδόσεις</small></span><span class="activity-menu-arrow">›</span></button>
+            <button class="activity-menu-item" onclick="showPricing()"><span class="activity-menu-copy"><strong>Το πακέτο μου</strong><small>${premiumDemoEnabled() ? 'Premium • Απεριόριστα τεστ' : `Δωρεάν • ${freeTestsRemaining()} τεστ απομένουν`}</small></span><span class="activity-menu-arrow">›</span></button>
+        </div>
+        <button class="secondary account-logout" onclick="logoutStoxos()">Αποσύνδεση</button>
+    </section>`;
+}
+
+function showSettings() {
+    app.innerHTML = `<section class="settings-page">
+        <p class="home-kicker">ΣΤΟΧΟΣ</p>
+        <h1>Ρυθμίσεις</h1>
+        <p class="muted">Εδώ θα συγκεντρωθούν οι επιλογές προσαρμογής της εφαρμογής.</p>
+        <div class="settings-placeholder"><strong>Εμφάνιση</strong><span>Οι επιλογές εμφάνισης θα προστεθούν σε επόμενη έκδοση.</span></div>
+        <div class="settings-placeholder"><strong>Ειδοποιήσεις</strong><span>Οι ρυθμίσεις ειδοποιήσεων δεν είναι ακόμη διαθέσιμες.</span></div>
+        <div class="settings-placeholder"><strong>Απόρρητο και δεδομένα</strong><span>Οι επιλογές διαχείρισης δεδομένων θα προστεθούν αργότερα.</span></div>
+        <p class="settings-note">Οι παραπάνω ενότητες είναι ενημερωτικές. Δεν αλλάζουν κάποια ρύθμιση προς το παρόν.</p>
+    </section>`;
+}
+
 // Επιλογή κατηγορίας ανάλογα με τη λειτουργία.
 function selectMode(mode) {
     if (!requireAccount()) return;
@@ -611,32 +635,97 @@ function selectMode(mode) {
     const title = isStudy ? "Εκμάθηση" : "Τεστ";
     const startFunction = isStudy ? "startStudy()" : "start()";
 
+    if (!isStudy) {
+        selectedTestCategories = new Set(); // Κενό σύνολο = όλες οι κατηγορίες.
+        const categories = [...new Set(BANK.map(q => q.category))];
+        const options = categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join("");
+        app.innerHTML = `
+            <section class="test-category-panel">
+                <p class="home-kicker">ΤΕΣΤ ΓΝΩΣΕΩΝ</p>
+                <h1>Επιλογή κατηγοριών</h1>
+                <p class="muted">Επίλεξε τις κατηγορίες που θέλεις να συμπεριλάβεις στο τεστ.</p>
+                <label for="test-category-select">Κατηγορία</label>
+                <div class="test-category-picker">
+                    <select id="test-category-select" aria-label="Επιλογή κατηγορίας">
+                        <option value="all">Όλες οι κατηγορίες</option>
+                        ${options}
+                    </select>
+                    <button type="button" class="test-category-add" onclick="addTestCategory()" aria-label="Προσθήκη κατηγορίας" title="Προσθήκη κατηγορίας">+</button>
+                </div>
+                <div id="test-category-tags" class="test-category-tags" aria-live="polite"></div>
+                <p id="test-category-count" class="test-category-info"></p>
+                <p class="muted">${QUESTIONS_PER_TEST} τυχαίες ερωτήσεις χωρίς επανάληψη.</p>
+                <p class="muted">${premiumDemoEnabled() ? 'Premium: απεριόριστα τεστ.' : `Διαθέσιμες δωρεάν προσπάθειες: ${freeTestsRemaining()}. Κάθε ολοκληρωμένο τεστ μετρά μία φορά.`}</p>
+                <div class="actions">
+                    <button class="secondary" onclick="home()">Αρχική</button>
+                    <button id="test-category-start" onclick="start()">Έναρξη τεστ</button>
+                </div>
+            </section>`;
+        renderTestCategories();
+        return;
+    }
+
     app.innerHTML = `
         <h1>${title}</h1>
         <label for="cat">Επιλογή κατηγορίας</label>
-        <select id="cat" ${isStudy ? 'onchange="updateStudyStartOptions()"' : ""}>
+        <select id="cat" onchange="updateStudyStartOptions()">
             ${categoryOptions()}
         </select>
-        ${isStudy ? `
-            <label for="study-start">Έναρξη από ερώτηση</label>
-            <select id="study-start"></select>
-            <p class="muted">Επίλεξε τον αριθμό ερώτησης από την κατηγορία.</p>
-        ` : ""}
-        <p class="muted">
-            ${isStudy
-                ? "Θα εμφανιστούν όλες οι ερωτήσεις με τη σωστή απάντηση επιλεγμένη."
-                : `Θα επιλεγούν ${QUESTIONS_PER_TEST} τυχαίες ερωτήσεις χωρίς επανάληψη.`}
-        </p>
-        ${isStudy ? '' : `<p class="muted">${premiumDemoEnabled() ? 'Premium: απεριόριστα τεστ.' : `Διαθέσιμες δωρεάν προσπάθειες: ${freeTestsRemaining()}. Κάθε ολοκληρωμένο τεστ μετρά μία φορά.`}</p>`}
+        <label for="study-start">Έναρξη από ερώτηση</label>
+        <select id="study-start"></select>
+        <p class="muted">Επίλεξε τον αριθμό ερώτησης από την κατηγορία.</p>
+        <p class="muted">Θα εμφανιστούν όλες οι ερωτήσεις με τη σωστή απάντηση επιλεγμένη.</p>
         <div class="actions">
             <button class="secondary" onclick="home()">Αρχική</button>
-            <button onclick="${startFunction}">Έναρξη ${isStudy ? "εκμάθησης" : "τεστ"}</button>
-        </div>
-    `;
+            <button onclick="startStudy()">Έναρξη εκμάθησης</button>
+        </div>`;
+    updateStudyStartOptions();
+}
 
-    if (isStudy) {
-        updateStudyStartOptions();
+// Κενό σύνολο = όλες οι κατηγορίες. Μόνο για τα τεστ γνώσεων.
+let selectedTestCategories = new Set();
+
+function addTestCategory() {
+    const picker = document.getElementById("test-category-select");
+    if (!picker) return;
+    if (picker.value === "all") selectedTestCategories.clear();
+    else selectedTestCategories.add(picker.value);
+    picker.value = "all";
+    renderTestCategories();
+}
+
+function removeTestCategory(category) {
+    selectedTestCategories.delete(category);
+    renderTestCategories();
+}
+
+function resetTestCategories() {
+    selectedTestCategories.clear();
+    renderTestCategories();
+}
+
+function renderTestCategories() {
+    const tags = document.getElementById("test-category-tags");
+    if (!tags) return;
+    if (selectedTestCategories.size === 0) {
+        tags.innerHTML = `<span class="test-category-tag test-category-all">Όλες οι κατηγορίες</span>`;
+    } else {
+        tags.innerHTML = [...selectedTestCategories].map((cat, index) => `
+            <span class="test-category-tag">
+                <span>${escapeHtml(cat)}</span>
+                <button type="button" onclick="removeTestCategoryByIndex(${index})" aria-label="Αφαίρεση κατηγορίας ${escapeHtml(cat)}" title="Αφαίρεση">×</button>
+            </span>`).join("") + `<button type="button" class="test-category-reset" onclick="resetTestCategories()">Όλες</button>`;
     }
+    const available = selectedQuestions().length;
+    document.getElementById("test-category-count").textContent =
+        `${selectedTestCategories.size || new Set(BANK.map(q => q.category)).size} κατηγορίες · ${available.toLocaleString("el-GR")} διαθέσιμες ερωτήσεις`;
+    const startButton = document.getElementById("test-category-start");
+    startButton.disabled = available < QUESTIONS_PER_TEST;
+}
+
+function removeTestCategoryByIndex(index) {
+    const category = [...selectedTestCategories][index];
+    if (category !== undefined) removeTestCategory(category);
 }
 
 // Ανανεώνουμε τους διαθέσιμους αριθμούς όταν αλλάζει η κατηγορία.
@@ -651,11 +740,15 @@ function updateStudyStartOptions() {
 
 // Φιλτράρουμε την τράπεζα με βάση την επιλεγμένη κατηγορία.
 function selectedQuestions() {
-    const selectedCategory = document.getElementById("cat").value;
-
-    return BANK.filter((question) => {
-        return selectedCategory === "all" || question.category === selectedCategory;
-    });
+    if (document.getElementById("test-category-select")) {
+        return selectedTestCategories.size === 0
+            ? BANK
+            : BANK.filter(question => selectedTestCategories.has(question.category));
+    }
+    const categorySelect = document.getElementById("cat");
+    if (!categorySelect) return [];
+    const selectedCategory = categorySelect.value;
+    return BANK.filter(question => selectedCategory === "all" || question.category === selectedCategory);
 }
 
 // Ανακατεύουμε ερωτήσεις χωρίς να αλλάξουμε την αρχική τράπεζα.

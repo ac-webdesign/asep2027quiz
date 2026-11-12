@@ -1,7 +1,7 @@
-ΣΤΟΧΟΣ / ΑΣΕΠ — Firebase Authentication v1 (04/11/2026)
+ΣΤΟΧΟΣ / ΑΣΕΠ — Firebase Authentication: αποκλειστικά σύνδεση/εγγραφή μέσω Google.
 
 ΤΙ ΕΧΕΙ ΥΛΟΠΟΙΗΘΕΙ
-• Firebase Authentication: Google + email/password, επαλήθευση email για νέα email accounts.
+• Firebase Authentication: αποκλειστικά σύνδεση/εγγραφή μέσω Google.
 • Αρχική οθόνη σύνδεσης. "Συνέχεια ως επισκέπτης": περιήγηση στις ενότητες και στα πακέτα.
 • Για Τεστ, Εκμάθηση, Σχήματα και Πρόοδο απαιτείται συνδεδεμένος/επαληθευμένος λογαριασμός.
 • Ασφαλής μετρητής 3 συνολικών ενάρξεων τεστ Γνώσεων + Σχημάτων, σε Firestore (transaction + rules).

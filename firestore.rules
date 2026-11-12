@@ -131,6 +131,20 @@ service cloud.firestore {
       allow get: if signed(uid);
       allow list, create, update, delete: if false;
     }
+    // Προετοιμασία συνδρομών: ο χρήστης διαβάζει μόνο τη δική του κατάσταση.
+    // Εγγραφές / αλλαγές γίνονται αποκλειστικά από trusted backend (Admin SDK).
+    // Η συλλογή αυτή ΔΕΝ ενεργοποιεί Premium πριν συνδεθεί ο backend έλεγχος.
+    match /subscriptions/{uid} {
+      allow get: if signed(uid);
+      allow list, create, update, delete: if false;
+    }
+    // Ιδιωτικά συμβάντα πληρωμών και αντιστοιχίσεις παρόχων.
+    match /billingEvents/{eventId} {
+      allow read, write: if false;
+    }
+    match /billingCustomers/{customerId} {
+      allow read, write: if false;
+    }
     match /{document=**} { allow read, write: if false; }
   }
 }

@@ -265,7 +265,7 @@ function firebaseAuthChanged(user) {
     }
     if (currentUser) {
         guestBrowsing = false;
-        home();
+        if (window.stoxosCheckoutNotice) showPricing(); else home();
     } else if (guestBrowsing) home();
     else showAuthLanding();
 }
@@ -356,7 +356,7 @@ async function allowTestStart() {
         isPremium = result.premium;
         startedTests = result.completed;
         if (!result.allowed) {
-            showPricing('Έχεις ολοκληρώσει και τα 3 δωρεάν τεστ.');
+            showPricing('Έχεις ολοκληρώσει και τα 5 δωρεάν τεστ.');
             return false;
         }
         return true;
@@ -387,49 +387,85 @@ async function saveTestResult(type, correct, total) {
 }
 
 function showPricing(message = '') {
+    message = message || window.stoxosCheckoutNotice || '';
+    window.stoxosCheckoutNotice = '';
     const remaining = freeTestsRemaining();
     app.innerHTML = `
         <div class="plans-heading">
             <p class="home-kicker">ΣΤΟΧΟΣ • ΠΡΟΣΒΑΣΗ</p>
             <h1>Διάλεξε τον τρόπο εξάσκησής σου</h1>
-            <p class="muted">Ξεκίνα δωρεάν και αναβάθμισε όταν ενεργοποιηθούν οι συνδρομές.</p>
+            <p class="muted">Ξεκίνα δωρεάν και δοκίμασε την αγορά Premium στο δοκιμαστικό περιβάλλον Stripe.</p>
             ${message ? `<p class="plans-message" role="status">${escapeHtml(message)}</p>` : ''}
         </div>
         <div class="plans-grid">
             <section class="plan-card" aria-label="Δωρεάν πακέτο">
                 <p class="plan-name">Δωρεάν</p><p class="plan-price">0€</p>
                 <p class="plan-period">Χωρίς χρέωση</p>
-                <ul><li>3 συνολικά ολοκληρωμένα τεστ</li><li>Τεστ γνώσεων ή σχημάτων</li><li>Εκμάθηση με λογαριασμό</li></ul>
+                <ul><li>5 συνολικά ολοκληρωμένα τεστ</li><li>Τεστ γνώσεων ή σχημάτων</li><li>Εκμάθηση με λογαριασμό</li></ul>
                 <button class="secondary plan-action" onclick="${authIdentity() ? 'home()' : 'showAuthLanding()'}">${authIdentity() ? `Συνέχισε δωρεάν (${premiumDemoEnabled() ? "απεριόριστα" : remaining + " απομένουν"})` : 'Δημιούργησε δωρεάν λογαριασμό'}</button>
             </section>
             <section class="plan-card" aria-label="Μηνιαίο Premium">
                 <p class="plan-name">Premium μηνιαίο</p><p class="plan-price">8,99€<span> / μήνα</span></p>
                 <p class="plan-period">Μηνιαία αυτόματη ανανέωση</p>
                 <ul><li>Απεριόριστα τεστ</li><li>Γνώσεις και σχήματα</li><li>Αναλυτική πρόοδος</li></ul>
-                <button class="plan-action" onclick="choosePlan('monthly')">Σύντομα διαθέσιμο</button>
+                <button class="plan-action" onclick="choosePlan('monthly')">Δοκιμαστική αγορά</button>
             </section>
             <section class="plan-card featured" aria-label="Ετήσιο Premium">
                 <span class="plan-highlight">Οικονομικότερο ανά μήνα</span>
                 <p class="plan-name">Premium ετήσιο</p><p class="plan-price">3,99€<span> / μήνα*</span></p>
                 <p class="plan-period">47,88€ χρέωση κάθε έτος</p>
                 <ul><li>Όλα του Premium</li><li>Απεριόριστα τεστ για 12 μήνες</li><li>60€ λιγότερα ετησίως από το μηνιαίο</li></ul>
-                <button class="plan-action" onclick="choosePlan('yearly')">Σύντομα διαθέσιμο</button>
+                <button class="plan-action" onclick="choosePlan('yearly')">Δοκιμαστική αγορά</button>
             </section>
         </div>
-        <p class="pricing-fineprint">* Το 3,99€/μήνα είναι η μηνιαία αναγωγή της ετήσιας πληρωμής 47,88€. Δεν γίνονται χρεώσεις και δεν ενεργοποιούνται συνδρομές σε αυτή την έκδοση.</p>
-        <div class="preview-tools"><button class="secondary" onclick="home()">← Αρχική</button></div>
+        <p class="pricing-fineprint">* Το 3,99€/μήνα είναι η μηνιαία αναγωγή της ετήσιας πληρωμής 47,88€. Δοκιμαστικό Stripe: δεν γίνονται πραγματικές χρεώσεις. Η δοκιμαστική συνδρομή ενεργοποιεί Premium στον λογαριασμό σου.</p>
+        <div class="preview-tools"><button class="secondary" onclick="home()">← Αρχική</button>${authIdentity() ? `<button class="secondary" onclick="manageStripeSubscription()">Διαχείριση συνδρομής</button>` : ``}</div>
     `;
 }
 
-// Τα κουμπιά ΔΕΝ χρεώνουν, ΔΕΝ ενεργοποιούν Premium.
-function choosePlan(plan) {
-    const title = plan === 'yearly' ? 'Premium ετήσιο (47,88€/έτος)' : 'Premium μηνιαίο (8,99€/μήνα)';
-    app.innerHTML = `<section class="payment-notice"><p class="home-kicker">ΣΥΝΤΟΜΑ ΔΙΑΘΕΣΙΜΟ</p>
-        <h1>${title}</h1><p>Οι πληρωμές δεν έχουν ενεργοποιηθεί και δεν μπορεί να γίνει αγορά.</p>
-        <p class="muted">Αργότερα θα συνδεθεί Google Play Billing και επαλήθευση συνδρομών από backend.</p>
-        <div class="actions"><button class="secondary" onclick="showPricing()">Πίσω στα πακέτα</button>
-        <button onclick="home()">Αρχική</button></div></section>`;
+// Stripe Checkout μέσω πιστοποιημένης Firebase callable function.
+let checkoutPending = false;
+async function choosePlan(plan) {
+    if (!['monthly', 'yearly'].includes(plan)) return;
+    if (!requireAccount('Συνδέσου με Google για να κάνεις δοκιμαστική αγορά.')) return;
+    if (checkoutPending) return;
+    if (!window.StoxosFirebase?.createStripeCheckout) {
+        showPricing('Η σύνδεση πληρωμών δεν έχει φορτωθεί. Δοκίμασε ξανά.');
+        return;
+    }
+    checkoutPending = true;
+    const buttons = document.querySelectorAll('.plan-action');
+    buttons.forEach(button => { if (!button.classList.contains('secondary')) button.disabled = true; });
+    try {
+        const url = await window.StoxosFirebase.createStripeCheckout(plan);
+        if (typeof url !== 'string' || !url.startsWith('https://checkout.stripe.com/')) throw Error('Μη έγκυρος σύνδεσμος πληρωμής.');
+        window.location.assign(url);
+    } catch (error) {
+        console.error('Stripe Checkout:', error);
+        showPricing('Η δοκιμαστική αγορά δεν ξεκίνησε. ' + (error?.message || 'Δοκίμασε ξανά.'));
+    } finally { checkoutPending = false; }
 }
+
+async function manageStripeSubscription() {
+    if (!requireAccount()) return;
+    try {
+        const url = await window.StoxosFirebase.createStripePortal();
+        if (typeof url !== 'string' || !url.startsWith('https://billing.stripe.com/')) throw Error('Μη έγκυρος σύνδεσμος διαχείρισης.');
+        window.location.assign(url);
+    } catch (error) { showPricing('Δεν άνοιξε η διαχείριση συνδρομής. ' + (error?.message || '')); }
+}
+
+function handleStripeReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get('checkout');
+    if (outcome !== 'success' && outcome !== 'cancel') return;
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    // Η επιτυχία της ανακατεύθυνσης ΔΕΝ χορηγεί Premium. Μόνο το webhook ενημερώνει Firestore.
+    window.stoxosCheckoutNotice = outcome === 'success'
+        ? 'Η δοκιμαστική πληρωμή ολοκληρώθηκε. Περιμένουμε επιβεβαίωση από το Stripe για το Premium.'
+        : 'Η δοκιμαστική αγορά ακυρώθηκε.';
+}
+handleStripeReturn();
 
 function showInsights() {
     if (!requireAccount('Για να δεις την πρόοδό σου χρειάζεται σύνδεση.')) return;
@@ -784,7 +820,7 @@ async function start() {
         // Ολοκλήρωση τυχόν εκκρεμών αποθηκεύσεων του προηγούμενου τεστ.
         if (!await flushProgress()) return;
         const result=await window.StoxosFirebase.beginAttempt(payload, true);
-        if (!result.allowed) {showPricing('Έχεις ολοκληρώσει και τα 3 δωρεάν τεστ.');return;}
+        if (!result.allowed) {showPricing('Έχεις ολοκληρώσει και τα 5 δωρεάν τεστ.');return;}
         test=newQuestions;
         answers=newAnswers;
         position=0;
@@ -1164,7 +1200,7 @@ async function startInductive() {
         const payload={id:newTestId(),type:'inductive',questionIds:[initial.id],answers:[],position:0,level:inductiveLevel,correct:0,total:0,currentId:initial.id,selected:null,answered:false};
         try {
             const result=await window.StoxosFirebase.beginAttempt(payload, true);
-            if (!result.allowed) {showPricing('Έχεις ολοκληρώσει και τα 3 δωρεάν τεστ.');return;}
+            if (!result.allowed) {showPricing('Έχεις ολοκληρώσει και τα 5 δωρεάν τεστ.');return;}
             savedAttempt=payload;
             activeTestId=payload.id;
             progressError=false;

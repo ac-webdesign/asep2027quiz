@@ -5,6 +5,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup,
   onAuthStateChanged, signOut
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-functions.js';
 import {
   getFirestore, doc, collection, serverTimestamp, runTransaction,
   onSnapshot, query, orderBy, limit, updateDoc, getDoc, deleteDoc, setDoc
@@ -23,6 +24,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
+const functions = getFunctions(firebaseApp, 'europe-west1');
 const google = new GoogleAuthProvider();
 let offProfile = null;
 let offResults = null;
@@ -58,6 +60,16 @@ const listenersOff = () => {
 };
 
 window.StoxosFirebase = {
+  createStripeCheckout: async plan => {
+    if (!auth.currentUser) throw Error('Απαιτείται σύνδεση Google.');
+    const result = await httpsCallable(functions, 'createStripeCheckout')({plan});
+    return result.data?.url;
+  },
+  createStripePortal: async () => {
+    if (!auth.currentUser) throw Error('Απαιτείται σύνδεση Google.');
+    const result = await httpsCallable(functions, 'createStripePortal')({});
+    return result.data?.url;
+  },
   // Η δημιουργία και η σύνδεση λογαριασμού γίνονται αποκλειστικά μέσω Google.
   loginGoogle: () => signInWithPopup(auth, google),
   logout: () => signOut(auth),

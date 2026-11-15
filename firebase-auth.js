@@ -60,6 +60,11 @@ const listenersOff = () => {
 };
 
 window.StoxosFirebase = {
+  getSubscriptionStatus: async () => {
+    if (!auth.currentUser) throw Error('Απαιτείται σύνδεση Google.');
+    const result = await httpsCallable(functions, 'getSubscriptionStatus')({});
+    return result.data;
+  },
   createStripeCheckout: async plan => {
     if (!auth.currentUser) throw Error('Απαιτείται σύνδεση Google.');
     const result = await httpsCallable(functions, 'createStripeCheckout')({plan});
@@ -152,13 +157,9 @@ window.StoxosFirebase = {
       throw Error('Μη έγκυρο αποτέλεσμα.');
     }
     if (!/^[a-f0-9-]{36}$/.test(submissionId || '')) throw Error('Μη έγκυρη προσπάθεια.');
+    // Οι listeners εκμάθησης ενεργοποιούνται μόνο στο startVerifiedSession.
+    // Η αποθήκευση αποτελέσματος δεν πρέπει να δημιουργεί νέες συνδρομές Firestore.
     const profileRef = doc(db, 'users', user.uid);
-    offStudyKnowledge=onSnapshot(doc(db,'users',user.uid,'study','knowledge'),
-      snap=>window.firebaseStudyChanged?.('knowledge',snap.exists()?snap.data():null),
-      err=>console.warn('Πρόοδος εκμάθησης γνώσεων:',err));
-    offStudyInductive=onSnapshot(doc(db,'users',user.uid,'study','inductive'),
-      snap=>window.firebaseStudyChanged?.('inductive',snap.exists()?snap.data():null),
-      err=>console.warn('Πρόοδος εκμάθησης σχημάτων:',err));
     const entitlementRef = doc(db, 'entitlements', user.uid);
     const activeRef = doc(db, 'users', user.uid, 'active', 'current');
     return runTransaction(db, async tx => {

@@ -15,6 +15,7 @@ let knowledgeChecked = false;
 // Δεδομένα για τη λειτουργία Εκμάθησης.
 let studyQuestions = [];
 let studyPosition = 0;
+let studyCategory = 'all'; // Φίλτρο εκμάθησης για σωστή επαναφορά από όλες τις κατηγορίες.
 // Προσωπική πρόοδος εκμάθησης, ανεξάρτητη από τα ημιτελή τεστ.
 let savedStudies = {knowledge:null, inductive:null};
 let studySaveQueue = {knowledge:Promise.resolve(), inductive:Promise.resolve()};
@@ -31,7 +32,7 @@ function firebaseStudyChanged(kind, record) {
 function studyPayload(kind) {
     if (kind === 'knowledge') {
         const q=studyQuestions[studyPosition];
-        return {category:q.category, questionId:String(q.id), position:studyPosition,
+        return {category:studyCategory, questionId:String(q.id), position:studyPosition,
             level:0, seenIds:[], correct:0, total:0, selected:null, answered:false};
     }
     return {category:String(inductiveStudyLevel), questionId:inductiveCurrent?.id||'',
@@ -71,7 +72,14 @@ async function resumeStudy(kind) {
         const record=await window.StoxosFirebase.getStudy(kind);
         if (!record) {savedStudies[kind]=null;home();return;}
         if (kind==='knowledge') {
-            studyQuestions=BANK.filter(q=>q.category===record.category);
+            // Παλιά αποθήκευση: η κατηγορία ήταν πάντα αυτή της τρέχουσας
+            // ερώτησης, ακόμη κι αν η εκμάθηση είχε αρχίσει από «Όλες».
+            const questionInCategory=BANK.filter(q=>q.category===record.category);
+            const inCategoryIndex=questionInCategory.findIndex(q=>String(q.id)===record.questionId);
+            const inAllAtSavedPosition=BANK[record.position] && String(BANK[record.position].id)===record.questionId;
+            const legacyAll=inAllAtSavedPosition && record.position!==inCategoryIndex;
+            studyCategory=(record.category==='all' || legacyAll) ? 'all' : record.category;
+            studyQuestions=studyCategory==='all' ? BANK : questionInCategory;
             let index=studyQuestions.findIndex(q=>String(q.id)===record.questionId);
             if (index<0) throw Error('Δεν βρέθηκε η αποθηκευμένη ερώτηση.');
             studyPosition=index;
@@ -123,7 +131,7 @@ async function discardStudy(kind) {
 
 // -------------------- FIREBASE AUTHENTICATION / FREEMIUM --------------------
 // Η ελάχιστη πρόσβαση (5 τεστ) τηρείται στο Firestore και ελέγχεται από κανόνες.
-// Δεν υπάρχει πραγματικό Premium ή λειτουργία παράκαμψης ορίων στην έκδοση αυτή.
+// Το Premium παρέχεται μόνο από έγκυρο entitlement του Firebase/Stripe backend.
 const FREE_TEST_LIMIT = 5;
 let authReady = false;
 let currentUser = null;
@@ -231,6 +239,7 @@ async function discardSavedTest() {
 function firebasePremiumChanged(value) {
     isPremium = value === true;
     if (document.querySelector('.home-dashboard')) home();
+    else if (document.getElementById('subscription-details')) loadSubscriptionDetails();
 }
 function newTestId() {
     if (!globalThis.crypto?.randomUUID) throw Error('Απαιτείται ασφαλής σύνδεση HTTPS.');
@@ -249,6 +258,7 @@ function firebaseAuthChanged(user) {
         uid: user.uid, email: user.email || '', displayName: user.displayName || ''
     } : null;
     if (oldUid !== (currentUser && currentUser.uid)) {
+        subscriptionDetailsRequest++;
         startedTests = 0;
         cloudHistory = [];
         cloudHistoryLoaded = false;
@@ -397,6 +407,7 @@ function showPricing(message = '') {
             <p class="muted">Ξεκίνα δωρεάν και δοκίμασε την αγορά Premium στο δοκιμαστικό περιβάλλον Stripe.</p>
             ${message ? `<p class="plans-message" role="status">${escapeHtml(message)}</p>` : ''}
         </div>
+        ${authIdentity() ? `<div id="subscription-details" aria-live="polite"><p class="muted">Φόρτωση στοιχείων συνδρομής...</p></div>` : ``}
         <div class="plans-grid">
             <section class="plan-card" aria-label="Δωρεάν πακέτο">
                 <p class="plan-name">Δωρεάν</p><p class="plan-price">0€</p>
@@ -408,19 +419,68 @@ function showPricing(message = '') {
                 <p class="plan-name">Premium μηνιαίο</p><p class="plan-price">8,99€<span> / μήνα</span></p>
                 <p class="plan-period">Μηνιαία αυτόματη ανανέωση</p>
                 <ul><li>Απεριόριστα τεστ</li><li>Γνώσεις και σχήματα</li><li>Αναλυτική πρόοδος</li></ul>
-                <button class="plan-action" onclick="choosePlan('monthly')">Δοκιμαστική αγορά</button>
+                <button class="plan-action plan-premium-action" onclick="choosePlan('monthly')" ${authIdentity() ? 'disabled' : ''}>${authIdentity() ? 'Έλεγχος συνδρομής...' : 'Δοκιμαστική αγορά'}</button>
             </section>
             <section class="plan-card featured" aria-label="Ετήσιο Premium">
                 <span class="plan-highlight">Οικονομικότερο ανά μήνα</span>
                 <p class="plan-name">Premium ετήσιο</p><p class="plan-price">3,99€<span> / μήνα*</span></p>
                 <p class="plan-period">47,88€ χρέωση κάθε έτος</p>
                 <ul><li>Όλα του Premium</li><li>Απεριόριστα τεστ για 12 μήνες</li><li>60€ λιγότερα ετησίως από το μηνιαίο</li></ul>
-                <button class="plan-action" onclick="choosePlan('yearly')">Δοκιμαστική αγορά</button>
+                <button class="plan-action plan-premium-action" onclick="choosePlan('yearly')" ${authIdentity() ? 'disabled' : ''}>${authIdentity() ? 'Έλεγχος συνδρομής...' : 'Δοκιμαστική αγορά'}</button>
             </section>
         </div>
         <p class="pricing-fineprint">* Το 3,99€/μήνα είναι η μηνιαία αναγωγή της ετήσιας πληρωμής 47,88€. Δοκιμαστικό Stripe: δεν γίνονται πραγματικές χρεώσεις. Η δοκιμαστική συνδρομή ενεργοποιεί Premium στον λογαριασμό σου.</p>
-        <div class="preview-tools"><button class="secondary" onclick="home()">← Αρχική</button>${authIdentity() ? `<button class="secondary" onclick="manageStripeSubscription()">Διαχείριση συνδρομής</button>` : ``}</div>
+        <div class="preview-tools"><button class="secondary" onclick="home()">← Αρχική</button></div>
     `;
+    if (authIdentity()) loadSubscriptionDetails();
+}
+
+// Προβολή λεπτομερειών συνδρομής μόνο στον συνδεδεμένο χρήστη.
+let subscriptionDetailsRequest = 0;
+function updatePremiumPurchaseActions(info) {
+    // Ο χρήστης που έχει ήδη Premium ή συνδρομή σε εκκρεμότητα
+    // τη διαχειρίζεται από το Stripe Portal, δεν αγοράζει δεύτερο πακέτο.
+    const existingStripe = info.provider === 'stripe' &&
+        ['active','trialing','past_due','unpaid','paused'].includes(info.status);
+    const blocked = info.premium === true || existingStripe;
+    document.querySelectorAll('.plan-premium-action').forEach(button => {
+        button.disabled = blocked;
+        button.textContent = blocked ? 'Υπάρχει ήδη συνδρομή' : 'Δοκιμαστική αγορά';
+    });
+}
+function subscriptionDate(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : new Intl.DateTimeFormat('el-GR', {day:'numeric',month:'long',year:'numeric',timeZone:'Europe/Athens'}).format(date);
+}
+async function loadSubscriptionDetails() {
+    const target = document.getElementById('subscription-details');
+    if (!target || !authIdentity()) return;
+    const uid = authIdentity().uid;
+    const request = ++subscriptionDetailsRequest;
+    try {
+        const info = await window.StoxosFirebase.getSubscriptionStatus();
+        if (request !== subscriptionDetailsRequest || authIdentity()?.uid !== uid || !target.isConnected) return;
+        updatePremiumPurchaseActions(info);
+        const plan = info.plan === 'monthly' ? 'Premium μηνιαίο' : info.plan === 'yearly' ? 'Premium ετήσιο' : info.premium ? 'Premium' : 'Δωρεάν';
+        const end = subscriptionDate(info.currentPeriodEnd);
+        const canceled = info.cancelAtPeriodEnd === true;
+        const active = info.premium === true;
+        const status = active ? (canceled ? 'Ακυρώθηκε η αυτόματη ανανέωση' : 'Ενεργή') : info.status === 'canceled' ? 'Ληγμένη / ακυρωμένη' : info.status === 'past_due' ? 'Εκκρεμεί πληρωμή' : 'Χωρίς ενεργή συνδρομή';
+        const dateLabel = end ? (active && !canceled ? 'Επόμενη ανανέωση / τέλος περιόδου' : 'Λήξη τρέχουσας περιόδου') : null;
+        target.innerHTML = `<section class="subscription-summary" aria-label="Στοιχεία συνδρομής">
+            <h2>Η συνδρομή μου</h2>
+            <p><strong>Πακέτο:</strong> ${escapeHtml(plan)}</p>
+            <p><strong>Κατάσταση:</strong> ${escapeHtml(status)}</p>
+            ${dateLabel ? `<p><strong>${dateLabel}:</strong> ${escapeHtml(end)}</p>` : ''}
+            ${active && canceled ? '<p class="muted">Το Premium παραμένει ενεργό έως τη λήξη της πληρωμένης περιόδου. Δεν θα γίνει αυτόματη ανανέωση.</p>' : ''}
+            ${info.provider === 'stripe' ? '<button class="secondary" onclick="manageStripeSubscription()">Διαχείριση συνδρομής</button>' : ''}
+        </section>`;
+    } catch (error) {
+        if (request !== subscriptionDetailsRequest || !target.isConnected) return;
+        console.error('Στοιχεία συνδρομής:', error);
+        target.innerHTML = '<p class="muted">Δεν ήταν δυνατή η φόρτωση των στοιχείων συνδρομής. <button class="secondary" onclick="loadSubscriptionDetails()">Επανάληψη</button></p>';
+    }
 }
 
 // Stripe Checkout μέσω πιστοποιημένης Firebase callable function.
@@ -428,6 +488,10 @@ let checkoutPending = false;
 async function choosePlan(plan) {
     if (!['monthly', 'yearly'].includes(plan)) return;
     if (!requireAccount('Συνδέσου με Google για να κάνεις δοκιμαστική αγορά.')) return;
+    if (isPremium) {
+        showPricing('Έχεις ήδη ενεργή πρόσβαση Premium. Μπορείς να διαχειριστείς την υπάρχουσα συνδρομή.');
+        return;
+    }
     if (checkoutPending) return;
     if (!window.StoxosFirebase?.createStripeCheckout) {
         showPricing('Η σύνδεση πληρωμών δεν έχει φορτωθεί. Δοκίμασε ξανά.');
@@ -641,8 +705,8 @@ function showAccount() {
             <div class="account-profile-copy"><strong>${escapeHtml(user.displayName || 'Χρήστης Google')}</strong><small>${escapeHtml(user.email || '')}</small></div>
         </div>
         <div class="account-stats">
-            <div><strong>${results.length}</strong><span>Ολοκληρωμένα τεστ</span></div>
-            <div><strong>${avg === null ? '—' : avg + '%'}</strong><span>Μέση επίδοση</span></div>
+            <div><strong>${cloudHistoryLoaded ? results.length : '—'}</strong><span>Πρόσφατα τεστ (έως 50)</span></div>
+            <div><strong>${avg === null ? '—' : avg + '%'}</strong><span>Μέση επίδοση (έως 50)</span></div>
         </div>
         <div class="account-links">
             <button class="activity-menu-item" onclick="showInsights()"><span class="activity-menu-copy"><strong>Η πρόοδός μου</strong><small>Αποτελέσματα και επιδόσεις</small></span><span class="activity-menu-arrow">›</span></button>
@@ -954,6 +1018,7 @@ async function finish() {
 // Στην εκμάθηση ΔΕΝ ανακατεύουμε και ΔΕΝ περιορίζουμε τις ερωτήσεις.
 function startStudy() {
     if (!requireAccount()) return;
+    studyCategory=document.getElementById('cat')?.value || 'all';
     studyQuestions = selectedQuestions();
 
     if (studyQuestions.length === 0) {

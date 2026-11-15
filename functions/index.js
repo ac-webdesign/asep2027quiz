@@ -35,6 +35,7 @@ exports.getSubscriptionStatus = onCall(
       status: typeof sub?.status === 'string' ? sub.status : 'none',
       provider: ['stripe', 'google_play'].includes(sub?.provider) ? sub.provider : null,
       currentPeriodEnd: sub?.currentPeriodEnd?.toMillis?.() ?? null,
+      cancelAtPeriodEnd: sub?.cancelAtPeriodEnd === true,
     };
   }
 );

@@ -1,37 +1,45 @@
-ΣΤΟΧΟΣ — Βήμα 2: Firebase Cloud Functions (ασφαλής βάση, χωρίς πληρωμές)
+ΣΤΟΧΟΣ — Προετοιμασία ΑΣΕΠ 2027
+CHECKPOINT: 15/11/2026 (έκδοση δοκιμαστικών συνδρομών Stripe)
 
 ΠΕΡΙΕΧΟΜΕΝΑ
-firebase.json
-functions/package.json
-functions/index.txt  (μετονόμασέ το σε index.js πριν από την εγκατάσταση)
+- index.html, style.css: εμφάνιση και πλοήγηση εφαρμογής
+- script.js: τεστ γνώσεων, επαγωγικός συλλογισμός, εκμάθηση,
+  επαναφορά προόδου, λογαριασμός και προβολή συνδρομής
+- firebase-auth.js: Google Authentication, Firestore, Firebase callables
+- questions.js, inductive-questions.js: τράπεζες ερωτήσεων (αμετάβλητες)
+- firestore.rules: ασφάλεια δεδομένων και δωρεάν όριο
+- functions/index.js: Stripe Checkout, Billing Portal, Webhook,
+  συγχρονισμός Premium και στοιχεία συνδρομής
+- functions/package.json, package-lock.json: dependencies backend
+- .firebaserc, firebase.json: ρυθμίσεις Firebase
+- .gitignore: αγνόηση node_modules, τοπικών αρχείων και secrets
 
-ΑΠΑΙΤΗΣΕΙΣ
-- Node.js 22 και Firebase CLI στον υπολογιστή.
-- Firebase project: stoxos-asep, με Blaze.
-- Αποθήκευσε αυτά τα αρχεία στον κύριο φάκελο του project, με τη δομή που φαίνεται παραπάνω.
-- Μην αντικαταστήσεις τυχόν υπάρχον firebase.json χωρίς να ελέγξουμε πρώτα τη συγχώνευση ρυθμίσεων.
+ΤΡΕΧΟΥΣΑ ΛΕΙΤΟΥΡΓΙΑ
+- Σύνδεση αποκλειστικά με Google (Firebase Authentication).
+- 5 δωρεάν ΟΛΟΚΛΗΡΩΜΕΝΑ τεστ ανά λογαριασμό.
+- Εκμάθηση χωρίς κατανάλωση δωρεάν τεστ.
+- Firestore: αποθήκευση αποτελεσμάτων, ημιτελών τεστ και εκμάθησης.
+- Premium μηνιαίο 8,99€ / ετήσιο 47,88€ στο Stripe SANDBOX.
+  Δεν γίνονται πραγματικές χρεώσεις σε αυτό το στάδιο.
+- Η πρόσβαση Premium καθορίζεται από entitlements/{uid}.premium,
+  που ενημερώνεται από αξιόπιστο backend/webhook, όχι από τον browser.
+- Στο «Το πακέτο μου» εμφανίζονται το πλάνο, η κατάσταση, η
+  ανανέωση/λήξη και η διαχείριση συνδρομής μέσω Stripe Portal.
 
-ΕΝΤΟΛΕΣ (από τον κύριο φάκελο project)
-  npm install -g firebase-tools
-  firebase login
-  firebase use stoxos-asep
-  cd functions
-  npm install
-  npm run check
-  cd ..
-  firebase deploy --only functions:billing
+ΕΓΚΑΤΑΣΤΑΣΗ ΚΑΙ ΔΟΚΙΜΕΣ
+- Δες README_SETUP.txt για τα βήματα τοπικής δοκιμής και deploy.
+- Κράτα αντίγραφο των αρχείων και του Firestore πριν από αλλαγές.
+- ΜΗΝ ανεβάζεις secrets, private keys ή τον φάκελο node_modules στο Git.
 
-ΤΙ ΚΑΝΕΙ
-- Δημοσιεύει την callable function getSubscriptionStatus στην περιοχή europe-west1.
-- Απαιτεί Firebase Authentication.
-- Διαβάζει μόνο τη δική του συνδρομή (UID από verified Firebase token).
-- Δεν δημιουργεί συνδρομές, δεν γράφει στο Firestore, δεν χρεώνει χρήστες.
-- Το Premium συνεχίζει να ελέγχεται από την υπάρχουσα συλλογή entitlements.
-
-ΠΡΙΝ ΑΠΟ ΠΡΑΓΜΑΤΙΚΕΣ ΠΛΗΡΩΜΕΣ
-Χρειάζονται Stripe test keys/prices, Google Play setup, webhooks, έλεγχοι
-συνδρομών, προστασία idempotency, ακυρώσεις, επιστροφές, App Check,
-Firestore emulator tests και έλεγχος τιμολόγησης/νομικών όρων.
-
-ΠΡΟΣΟΧΗ: Η εγκατάσταση Cloud Functions ενδέχεται να δημιουργήσει χρεώσεις
-στο Blaze. Οι ειδοποιήσεις budget δεν αποτελούν hard spending cap.
+ΓΝΩΣΤΟΙ ΠΕΡΙΟΡΙΣΜΟΙ
+- Η εφαρμογή φορτώνει ερωτήσεις από δημόσια JavaScript αρχεία:
+  δεν υπάρχει server-side προστασία της τράπεζας ερωτήσεων.
+- Η βαθμολογία υπολογίζεται στον browser και δεν είναι anti-cheat.
+- Το ιστορικό στην προβολή λογαριασμού/προόδου περιλαμβάνει έως
+  50 πρόσφατα αποτελέσματα, όχι υποχρεωτικά όλες τις ολοκληρώσεις.
+- Δεν έχουν ολοκληρωθεί οι δοκιμές επιστροφών χρημάτων,
+  αμφισβητήσεων πληρωμών και ανεπιτυχών ανανεώσεων για Live Mode.
+- Για πραγματικές χρεώσεις απαιτούνται ακόμη νομικά κείμενα,
+  λογιστική/φορολογική συμμόρφωση και έλεγχος παραγωγής.
+- Το ZIP του project δεν περιέχει δεδομένα Firestore, Stripe Secrets
+  ή τις ενεργές ρυθμίσεις που είναι αποθηκευμένες στο cloud.

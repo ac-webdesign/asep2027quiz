@@ -1,7 +1,4 @@
-/* STOXOS — Design System 3.0
-   Visual-only update. Compatible with v2 index.html and script.js.
-   No changes to question datasets, logic, authentication or Firestore.
-*/
+/* STOXOS — Design System 3.0. Responsive presentation, including Premium status. */
 :root {
   color-scheme: light;
   --navy: #102f49;
@@ -171,6 +168,14 @@ select { display:block; appearance:auto; width:100%; min-height:49px; padding:11
 
 /* Pricing and user progress */
 .plans-heading { max-width:670px; margin-bottom:22px; }
+#subscription-details { margin:0 0 22px; }
+.subscription-summary { padding:18px 20px; border:1px solid var(--line); border-radius:15px; background:var(--surface-soft); box-shadow:var(--shadow-sm); }
+.subscription-summary h2 { margin:0 0 14px; color:var(--navy); font-size:1.05rem; }
+.subscription-summary p { margin:8px 0; color:var(--ink-soft); font-size:.83rem; line-height:1.55; }
+.subscription-summary p strong { color:var(--ink); font-weight:800; }
+.subscription-summary .muted { color:var(--muted); }
+.subscription-summary button { margin-top:13px; }
+.plan-premium-action:disabled { background:#ecf2f4; border-color:var(--line); color:var(--ink-soft); opacity:1; box-shadow:none; cursor:default; }
 .plans-heading h1 { margin:0 0 10px; }
 .plans-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:stretch; gap:13px; margin:23px 0 16px; }
 .plan-card { display:flex; flex-direction:column; min-width:0; padding:21px 17px 18px; border:1px solid var(--line); border-radius:17px; background:#fff; box-shadow:var(--shadow-sm); }

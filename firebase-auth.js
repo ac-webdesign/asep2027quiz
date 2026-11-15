@@ -3,7 +3,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import {
   getAuth, GoogleAuthProvider, signInWithPopup,
-  onAuthStateChanged, signOut
+  onAuthStateChanged, signOut, reauthenticateWithPopup
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-functions.js';
 import {
@@ -60,6 +60,18 @@ const listenersOff = () => {
 };
 
 window.StoxosFirebase = {
+  observeAuth: callback => onAuthStateChanged(auth, callback),
+  deleteAccount: async () => {
+    const user = auth.currentUser;
+    if (!user) throw Error('Απαιτείται σύνδεση Google.');
+    // Google popup verifies that the person requesting deletion owns this account.
+    await reauthenticateWithPopup(user, google);
+    await user.getIdToken(true);
+    const response = await httpsCallable(functions, 'deleteAccount', {timeout: 330000})({});
+    if (response.data?.deleted !== true) throw Error('Δεν επιβεβαιώθηκε η διαγραφή.');
+    try { await signOut(auth); } catch (err) { console.warn('Sign out after deletion:', err); }
+    return true;
+  },
   getSubscriptionStatus: async () => {
     if (!auth.currentUser) throw Error('Απαιτείται σύνδεση Google.');
     const result = await httpsCallable(functions, 'getSubscriptionStatus')({});

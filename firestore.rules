@@ -3,7 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signed(uid) {
       return request.auth != null && request.auth.uid == uid
-        && request.auth.token.email_verified == true;
+        && request.auth.token.email_verified == true
+        && !exists(/databases/$(database)/documents/accountDeletionLocks/$(uid));
     }
     function premium(uid) {
       return exists(/databases/$(database)/documents/entitlements/$(uid))
@@ -125,6 +126,10 @@ service cloud.firestore {
           );
         allow update, delete: if false;
       }
+    }
+    // Εσωτερικός προσωρινός δείκτης ασφαλείας κατά τη διαγραφή λογαριασμού.
+    match /accountDeletionLocks/{uid} {
+      allow read, write: if false;
     }
     // Δημιουργείται μόνο χειροκίνητα από Firebase Console ή trusted backend/Admin SDK.
     match /entitlements/{uid} {

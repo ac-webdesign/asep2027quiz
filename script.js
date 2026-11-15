@@ -292,6 +292,7 @@ function firebaseResultsChanged(records) {
 }
 
 function firebaseSetupError(message) {
+    if (accountDeletionPending) return; // Οι listeners κλείνουν κατά την οριστική διαγραφή.
     app.innerHTML = `<section class="auth-panel"><h1>Αδυναμία σύνδεσης Firebase</h1>
         <p>${escapeHtml(message)}</p><p class="muted">Έλεγξε ότι δημοσιεύτηκαν οι κανόνες Firestore και ότι έχεις πρόσβαση στο διαδίκτυο.</p>
         <button onclick="showAuthLanding()">Επιστροφή</button></section>`;
@@ -330,7 +331,7 @@ function showAuthLanding(message = '') {
                 <div class="auth-divider"></div>
                 <button class="secondary" onclick="guestContinue()">Συνέχεια ως επισκέπτης</button>
             </div>
-            <p class="auth-disclaimer">Η σύνδεση και η δημιουργία λογαριασμού γίνονται αποκλειστικά μέσω Google. Ως επισκέπτης μπορείς να περιηγηθείς στην πλατφόρμα και στα πακέτα. Για τεστ ή εκμάθηση χρειάζεσαι λογαριασμό.</p>
+            <p class="auth-disclaimer">Η σύνδεση και η δημιουργία λογαριασμού γίνονται αποκλειστικά μέσω Google. Ως επισκέπτης μπορείς να περιηγηθείς στην πλατφόρμα και στα πακέτα. Για τεστ ή εκμάθηση χρειάζεσαι λογαριασμό. Δες την <a href="privacy.html">Πολιτική απορρήτου</a> και τους <a href="terms.html">Όρους χρήσης</a>.</p>
         </section>`;
 }
 
@@ -720,12 +721,68 @@ function showSettings() {
     app.innerHTML = `<section class="settings-page">
         <p class="home-kicker">ΣΤΟΧΟΣ</p>
         <h1>Ρυθμίσεις</h1>
-        <p class="muted">Εδώ θα συγκεντρωθούν οι επιλογές προσαρμογής της εφαρμογής.</p>
-        <div class="settings-placeholder"><strong>Εμφάνιση</strong><span>Οι επιλογές εμφάνισης θα προστεθούν σε επόμενη έκδοση.</span></div>
-        <div class="settings-placeholder"><strong>Ειδοποιήσεις</strong><span>Οι ρυθμίσεις ειδοποιήσεων δεν είναι ακόμη διαθέσιμες.</span></div>
-        <div class="settings-placeholder"><strong>Απόρρητο και δεδομένα</strong><span>Οι επιλογές διαχείρισης δεδομένων θα προστεθούν αργότερα.</span></div>
-        <p class="settings-note">Οι παραπάνω ενότητες είναι ενημερωτικές. Δεν αλλάζουν κάποια ρύθμιση προς το παρόν.</p>
+        <p class="muted">Οι πληροφορίες και οι επιλογές που αφορούν τον λογαριασμό σου.</p>
+        <div class="settings-section-title">Απόρρητο και δεδομένα</div>
+        <div class="settings-list">
+            <a class="settings-link" href="privacy.html"><span><strong>Πολιτική απορρήτου</strong><small>Πώς χρησιμοποιούνται και προστατεύονται τα δεδομένα</small></span><span class="settings-chevron" aria-hidden="true">›</span></a>
+            ${authIdentity() ? `<button class="settings-link" onclick="showDeleteAccount()"><span><strong>Διαγραφή λογαριασμού</strong><small>Οριστική διαγραφή της προόδου και του λογαριασμού σου</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>` : `<a class="settings-link" href="delete-account.html"><span><strong>Διαγραφή λογαριασμού</strong><small>Σύνδεση και υποβολή αιτήματος διαγραφής</small></span><span class="settings-chevron" aria-hidden="true">›</span></a>`}
+        </div>
+        <div class="settings-section-title">Βοήθεια και υποστήριξη</div>
+        <div class="settings-list">
+            <a class="settings-link" href="support.html"><span><strong>Κέντρο βοήθειας</strong><small>Συχνές ερωτήσεις και υποστήριξη</small></span><span class="settings-chevron" aria-hidden="true">›</span></a>
+        </div>
+        <div class="settings-section-title">Σχετικά με την εφαρμογή</div>
+        <div class="settings-list">
+            <a class="settings-link" href="terms.html"><span><strong>Όροι χρήσης</strong><small>Κανόνες χρήσης και πληροφορίες συνδρομών</small></span><span class="settings-chevron" aria-hidden="true">›</span></a>
+            <div class="settings-static"><span><strong>ΣΤΟΧΟΣ</strong><small>Έκδοση ανάπτυξης • Ανεξάρτητη πλατφόρμα ΑΣΕΠ</small></span></div>
+        </div>
     </section>`;
+}
+
+let accountDeletionPending = false;
+function showDeleteAccount(message = '') {
+    if (!authIdentity()) return showAuthLanding('Συνδέσου με Google για να διαγράψεις τον λογαριασμό σου.');
+    const email = authIdentity().email;
+    app.innerHTML = `<section class="settings-page deletion-page">
+        <button class="settings-back" onclick="showSettings()">← Ρυθμίσεις</button>
+        <p class="home-kicker">ΑΠΟΡΡΗΤΟ ΚΑΙ ΔΕΔΟΜΕΝΑ</p>
+        <h1>Διαγραφή λογαριασμού</h1>
+        ${message ? `<p class="plans-message" role="alert">${escapeHtml(message)}</p>` : ''}
+        <div class="deletion-warning"><strong>Αυτή η ενέργεια είναι οριστική.</strong>
+            <p>Θα διαγραφεί ο λογαριασμός ΣΤΟΧΟΣ (${escapeHtml(email)}) και τα αποθηκευμένα τεστ, οι επιδόσεις και η πρόοδος εκμάθησης.</p>
+            <p>Αν έχεις συνδρομή Stripe, θα ακυρωθεί αμέσως και η Premium πρόσβαση θα τερματιστεί χωρίς να περιμένει την ημερομηνία ανανέωσης. Η διαγραφή δεν σημαίνει αυτόματη επιστροφή χρημάτων.</p>
+            <p>Ορισμένα οικονομικά στοιχεία/παραστατικά ενδέχεται να παραμείνουν στον πάροχο πληρωμών για νομικούς λόγους.</p>
+        </div>
+        <label class="deletion-input-label" for="deletion-confirm-input">Γράψε <strong>ΔΙΑΓΡΑΦΗ</strong> για επιβεβαίωση</label>
+        <input id="deletion-confirm-input" class="deletion-confirm-input" type="text" autocomplete="off" spellcheck="false" oninput="updateDeleteButton()" placeholder="ΔΙΑΓΡΑΦΗ">
+        <label class="deletion-consent"><input type="checkbox" id="deletion-confirm-check" onchange="updateDeleteButton()"><span>Κατανοώ ότι τα δεδομένα μου θα διαγραφούν οριστικά και ότι η ενεργή συνδρομή μου θα ακυρωθεί αμέσως.</span></label>
+        <button id="delete-account-action" class="danger-action" onclick="confirmDeleteAccount()" disabled>Διαγραφή λογαριασμού</button>
+        <p id="deletion-progress" class="muted" role="status" aria-live="polite"></p>
+        <p class="settings-note">Μπορείς επίσης να χρησιμοποιήσεις τη <a href="delete-account.html">δημόσια σελίδα διαγραφής</a> χωρίς να εγκαταστήσεις την εφαρμογή.</p>
+    </section>`;
+}
+function updateDeleteButton() {
+    const button=document.getElementById('delete-account-action');
+    if (!button) return;
+    button.disabled = accountDeletionPending || document.getElementById('deletion-confirm-input')?.value.trim() !== 'ΔΙΑΓΡΑΦΗ' || !document.getElementById('deletion-confirm-check')?.checked;
+}
+async function confirmDeleteAccount() {
+    if (accountDeletionPending || !authIdentity()) return;
+    if (document.getElementById('deletion-confirm-input')?.value.trim() !== 'ΔΙΑΓΡΑΦΗ' || !document.getElementById('deletion-confirm-check')?.checked) return;
+    if (!confirm('Τελική επιβεβαίωση: να διαγραφεί ΟΡΙΣΤΙΚΑ ο λογαριασμός και να ακυρωθεί αμέσως οποιαδήποτε συνδρομή Stripe;')) return;
+    accountDeletionPending = true;
+    updateDeleteButton();
+    const notice = document.getElementById('deletion-progress');
+    if (notice) notice.textContent='Επιβεβαίωσε ξανά τον λογαριασμό σου στο παράθυρο Google. Στη συνέχεια θα πραγματοποιηθεί η διαγραφή.';
+    try {
+        await window.StoxosFirebase.deleteAccount();
+        // Firebase auth listener will switch to signed-out view.
+        showAuthLanding('Ο λογαριασμός σου στον ΣΤΟΧΟ διαγράφηκε.');
+    } catch (error) {
+        console.error('Account deletion:', error);
+        const now = document.getElementById('deletion-progress');
+        if (now) now.textContent='Δεν ολοκληρώθηκε η διαγραφή. '+(error?.message || 'Δοκίμασε ξανά.');
+    } finally { accountDeletionPending = false; updateDeleteButton(); }
 }
 
 // Επιλογή κατηγορίας ανάλογα με τη λειτουργία.

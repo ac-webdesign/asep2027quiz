@@ -3,6 +3,7 @@
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const Stripe = require('stripe');
 
@@ -18,6 +19,7 @@ const PRICES = Object.freeze({
 });
 const stripe = () => new Stripe(stripeKey.value());
 const callableOptions = { region: REGION, enforceAppCheck: false, maxInstances: 3, secrets: [stripeKey] };
+const deletionRef = (uid) => db.collection('accountDeletionLocks').doc(uid);
 
 exports.getSubscriptionStatus = onCall(
   { region: REGION, enforceAppCheck: false, maxInstances: 3 },
@@ -61,6 +63,9 @@ exports.createStripeCheckout = onCall(callableOptions, async (request) => {
   const plan = request.data?.plan;
   if (!Object.hasOwn(PRICES, plan)) throw new HttpsError('invalid-argument', 'Μη έγκυρο πακέτο.');
   const uid = request.auth.uid;
+  if ((await deletionRef(uid).get()).exists) {
+    throw new HttpsError('failed-precondition', 'Ο λογαριασμός βρίσκεται σε διαδικασία διαγραφής.');
+  }
   const existing = await db.collection('subscriptions').doc(uid).get();
   if (existing.exists && existing.get('provider') === 'stripe' &&
       ['active', 'trialing', 'past_due'].includes(existing.get('status'))) {
@@ -79,6 +84,11 @@ exports.createStripeCheckout = onCall(callableOptions, async (request) => {
       cancel_url: `${SITE}/?checkout=cancel`,
       allow_promotion_codes: false,
     });
+    // A deletion may have begun while Stripe was creating the session.
+    if ((await deletionRef(uid).get()).exists) {
+      await stripe().checkout.sessions.expire(session.id);
+      throw new HttpsError('failed-precondition', 'Ο λογαριασμός βρίσκεται σε διαδικασία διαγραφής.');
+    }
     return { url: session.url };
   } catch (error) {
     console.error('Stripe Checkout error', error?.type || error?.code || 'unknown');
@@ -88,6 +98,9 @@ exports.createStripeCheckout = onCall(callableOptions, async (request) => {
 
 exports.createStripePortal = onCall(callableOptions, async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Απαιτείται σύνδεση Google.');
+  if ((await deletionRef(request.auth.uid).get()).exists) {
+    throw new HttpsError('failed-precondition', 'Ο λογαριασμός βρίσκεται σε διαδικασία διαγραφής.');
+  }
   const saved = await db.collection('billingCustomers').doc(request.auth.uid).get();
   const customerId = saved.get('stripeCustomerId');
   if (!customerId) throw new HttpsError('failed-precondition', 'Δεν βρέθηκε λογαριασμός χρέωσης.');
@@ -105,6 +118,14 @@ async function syncSubscription(client, subscriptionId) {
   const subscription = await client.subscriptions.retrieve(subscriptionId);
   const uid = subscription.metadata?.firebaseUid;
   if (!uid || uid.includes('/')) throw new Error('Subscription has no trusted Firebase UID metadata');
+  // Account deletions take precedence over any delayed or reordered Stripe event.
+  if ((await deletionRef(uid).get()).exists) return;
+  try {
+    await getAuth().getUser(uid);
+  } catch (error) {
+    if (error?.code === 'auth/user-not-found') return;
+    throw error;
+  }
   const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
   const customer = await db.collection('billingCustomers').doc(uid).get();
   if (!customer.exists || customer.get('stripeCustomerId') !== customerId) {
@@ -119,7 +140,8 @@ async function syncSubscription(client, subscriptionId) {
   const subRef = db.collection('subscriptions').doc(uid);
   const entitlementRef = db.collection('entitlements').doc(uid);
   await db.runTransaction(async (tx) => {
-    const [previous, entitlement] = await Promise.all([tx.get(subRef), tx.get(entitlementRef)]);
+    const [deletionLock, previous, entitlement] = await Promise.all([tx.get(deletionRef(uid)), tx.get(subRef), tx.get(entitlementRef)]);
+    if (deletionLock.exists) return;
     // A delayed event from an older subscription must not revoke a newer subscription.
     if (previous.exists && previous.get('provider') === 'stripe' &&
         previous.get('stripeSubscriptionId') !== subscription.id &&
@@ -168,6 +190,108 @@ exports.stripeWebhook = onRequest(
       if (error.code === 6) { res.status(200).send('Already processed'); return; }
       console.error('Stripe webhook processing failed', event.type, error?.message);
       res.status(500).send('Retry later');
+    }
+  }
+);
+
+
+// Permanent account erasure: ONLY a recently reauthenticated owner can start it.
+// We remove the Stripe customer (cancelling subscriptions immediately), recursive
+// Firestore user data, and finally the Firebase Auth user. No card data is stored here.
+exports.deleteAccount = onCall(
+  { region: REGION, maxInstances: 3, timeoutSeconds: 300, memory: '512MiB', secrets: [stripeKey], enforceAppCheck: false },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid || request.auth.token?.email_verified !== true) {
+      throw new HttpsError('unauthenticated', 'Απαιτείται επαληθευμένος λογαριασμός Google.');
+    }
+    const authTime = Number(request.auth.token?.auth_time);
+    if (!Number.isFinite(authTime) || Date.now() / 1000 - authTime > 300 || authTime > Date.now() / 1000 + 30) {
+      throw new HttpsError('failed-precondition', 'Επιβεβαίωσε ξανά τη σύνδεσή σου με Google.');
+    }
+
+    const subRef = db.collection('subscriptions').doc(uid);
+    const customerRef = db.collection('billingCustomers').doc(uid);
+    const lockRef = deletionRef(uid);
+    // We do not yet support deleting Play Billing subscriptions. Never delete
+    // the app account while an external recurring payment can keep charging.
+    const [subDoc, customerDoc] = await Promise.all([subRef.get(), customerRef.get()]);
+    if (subDoc.exists && subDoc.get('provider') === 'google_play') {
+      throw new HttpsError('failed-precondition', 'Απαιτείται πρώτα ακύρωση της συνδρομής Google Play.');
+    }
+    const storedCustomerId = customerDoc.get('stripeCustomerId');
+    const validCustomerId = typeof storedCustomerId === 'string' && storedCustomerId.startsWith('cus_');
+    if ((subDoc.exists && subDoc.get('provider') === 'stripe' || customerDoc.exists) && !validCustomerId) {
+      throw new HttpsError('failed-precondition', 'Δεν βρέθηκε έγκυρη αντιστοίχιση πληρωμής. Χρειάζεται έλεγχος πριν από τη διαγραφή.');
+    }
+
+    // Short-lived lease prevents concurrent deletion requests by the same user.
+    const now = Date.now();
+    await db.runTransaction(async (tx) => {
+      const lock = await tx.get(lockRef);
+      if (lock.exists && Number(lock.get('leaseUntilMs') || 0) > now) {
+        throw new HttpsError('aborted', 'Η διαγραφή εκτελείται ήδη.');
+      }
+      tx.set(lockRef, {
+        requestedAt: lock.exists ? (lock.get('requestedAt') || FieldValue.serverTimestamp()) : FieldValue.serverTimestamp(),
+        leaseUntilMs: now + 310000,
+        // Configure Firestore TTL on expiresAt to remove this safety marker.
+        expiresAt: Timestamp.fromMillis(now + 7 * 24 * 60 * 60 * 1000),
+      });
+    });
+
+    try {
+      const customerId = storedCustomerId;
+      if (validCustomerId) {
+        const client = stripe();
+        // Deleting a Stripe customer immediately cancels all active subscriptions.
+        // Historical invoices / legally necessary financial records can remain at Stripe.
+        try {
+          const customer = await client.customers.retrieve(customerId);
+          if (!customer.deleted) {
+            // Never erase a Stripe customer that does not belong to this UID.
+            if (customer.metadata?.firebaseUid !== uid) throw new Error('Stripe customer ownership mismatch');
+            // Expire any pending Checkout Sessions before removing the customer;
+            // otherwise an old payment link might be completed after deletion.
+            const openSessions = await client.checkout.sessions.list({customer: customerId, status: 'open', limit: 100});
+            for (const session of openSessions.data) {
+              try { await client.checkout.sessions.expire(session.id); }
+              catch (error) {
+                if (error?.code !== 'resource_missing' && error?.code !== 'checkout_session_expired') throw error;
+              }
+            }
+            if (openSessions.has_more) throw new Error('Too many open Checkout Sessions to expire safely');
+            await client.customers.del(customerId);
+          }
+        } catch (error) {
+          if (error?.code !== 'resource_missing') throw error;
+        }
+      }
+
+      // recursiveDelete is essential: deleting only users/{uid} would leave
+      // results, active attempts and study subcollections accessible behind it.
+      await db.recursiveDelete(db.collection('users').doc(uid));
+      await Promise.all([
+        db.collection('entitlements').doc(uid).delete(),
+        subRef.delete(), customerRef.delete(),
+      ]);
+      // Delete identity last, so an interrupted operation can be retried.
+      await getAuth().deleteUser(uid);
+      // Keep a minimal security marker temporarily: existing Firebase ID tokens
+      // can remain valid for up to an hour after Auth deletion. Firestore rules
+      // deny access while this marker exists. Configure TTL on expiresAt.
+      await lockRef.set({
+        state: 'completed', leaseUntilMs: 0,
+        completedAt: FieldValue.serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }, {merge: true}).catch(err => console.error('Finalizing deletion lock failed:', err?.message));
+      return { deleted: true };
+    } catch (error) {
+      // A failed operation remains blocked from Stripe webhook reactivation,
+      // but a fresh retry can immediately acquire a new lease.
+      await lockRef.set({leaseUntilMs: 0}, {merge:true}).catch(err => console.error('Deletion retry lease update failed:', err?.message));
+      console.error('Account deletion failed:', error?.code || error?.message || 'unknown');
+      throw new HttpsError('internal', 'Η διαγραφή δεν ολοκληρώθηκε. Δοκίμασε ξανά ή ζήτησε βοήθεια όταν ενεργοποιηθεί η υποστήριξη.');
     }
   }
 );

@@ -5,6 +5,23 @@ const QUESTIONS_PER_TEST = 25;
 const ANSWER_LETTERS = ["Α", "Β", "Γ", "Δ"];
 const app = document.getElementById("app");
 
+// Σταθερή σειρά των 11 γνωστικών ενοτήτων για τα συγκεντρωτικά αποτελέσματα.
+// Την ίδια σειρά χρησιμοποιεί το firebase-auth.js για τα arrays categoryCorrect / categoryTotal.
+const KNOWLEDGE_CATEGORY_ORDER = [
+    "Συνταγματικό Δίκαιο",
+    "Διοικητικό Δίκαιο",
+    "Ευρωπαϊκοί Θεσμοί και Δίκαιο",
+    "Οικονομικές Επιστήμες",
+    "Πληροφορική και Ψηφιακή Διακυβέρνηση",
+    "Σύγχρονη Ιστορία της Ελλάδος",
+    "Κώδικας Κατάστασης Πολιτικών Διοικητικών Υπαλλήλων και Υπαλλήλων Ν.Π.Δ.Δ.",
+    "Γενικός Κανονισμός για την Προστασία των Δεδομένων (GDPR)",
+    "Διοίκηση Επιχειρήσεων και Οργανισμών",
+    "Διοίκηση Ανθρώπινου Δυναμικού",
+    "Κώδικας Συμπεριφοράς Δημοσίων Υπαλλήλων"
+];
+
+
 // Δεδομένα για τη λειτουργία Τεστ.
 let test = [];
 let answers = [];
@@ -139,6 +156,9 @@ let guestBrowsing = false;
 let startedTests = 0;
 let cloudHistory = [];
 let cloudHistoryLoaded = false;
+let cloudAnalytics = null;
+let cloudAnalyticsLoaded = false;
+let insightHistoryFilter = "all";
 let attemptPending = false;
 let isPremium = false;
 let inductiveActiveTest = false;
@@ -239,6 +259,7 @@ async function discardSavedTest() {
 function firebasePremiumChanged(value) {
     isPremium = value === true;
     if (document.querySelector('.home-dashboard')) home();
+    else if (document.querySelector('.account-page')) showAccount();
     else if (document.getElementById('subscription-details')) loadSubscriptionDetails();
 }
 function newTestId() {
@@ -262,6 +283,8 @@ function firebaseAuthChanged(user) {
         startedTests = 0;
         cloudHistory = [];
         cloudHistoryLoaded = false;
+        cloudAnalytics = null;
+        cloudAnalyticsLoaded = false;
         isPremium = false;
         activeTestId = null;
         savedAttempt = null;
@@ -283,12 +306,21 @@ function firebaseAuthChanged(user) {
 function firebaseQuotaChanged(value) {
     startedTests = Number.isInteger(value) && value >= 0 ? value : 0;
     if (document.querySelector('.home-dashboard')) home();
+    else if (document.querySelector('.account-page')) showAccount();
 }
 
 function firebaseResultsChanged(records) {
     cloudHistory = Array.isArray(records) ? records : [];
     cloudHistoryLoaded = true;
-    if (document.querySelector('.insight-summary')) showInsights();
+    if (document.querySelector('.insights-dashboard')) showInsights();
+    else if (document.querySelector('.account-page')) showAccount();
+}
+
+function firebaseAnalyticsChanged(overview) {
+    cloudAnalytics = overview && overview.schema === 1 ? overview : null;
+    cloudAnalyticsLoaded = true;
+    if (document.querySelector('.insights-dashboard')) showInsights();
+    else if (document.querySelector('.account-page')) showAccount();
 }
 
 function firebaseSetupError(message) {
@@ -379,11 +411,23 @@ async function allowTestStart() {
 
 // Η συναλλαγή γράφει αποτέλεσμα + δωρεάν ολοκλήρωση ταυτόχρονα.
 // Δεν πρόκειται για server-side επαλήθευση ορθότητας απαντήσεων.
-async function saveTestResult(type, correct, total) {
+function buildKnowledgeBreakdown(questions, selectedAnswers) {
+    const categoryCorrect = Array(KNOWLEDGE_CATEGORY_ORDER.length).fill(0);
+    const categoryTotal = Array(KNOWLEDGE_CATEGORY_ORDER.length).fill(0);
+    questions.forEach((question, index) => {
+        const at = KNOWLEDGE_CATEGORY_ORDER.indexOf(question.category);
+        if (at < 0) throw Error('Άγνωστη κατηγορία ερώτησης: ' + question.category);
+        categoryTotal[at] += 1;
+        if (selectedAnswers[index] === question.correct) categoryCorrect[at] += 1;
+    });
+    return {categoryCorrect, categoryTotal};
+}
+
+async function saveTestResult(type, correct, total, breakdown = null) {
     if (!authIdentity() || !window.StoxosFirebase || !activeTestId || resultSaving) return false;
     resultSaving = true;
     try {
-        const response = await window.StoxosFirebase.saveResult(type, correct, total, activeTestId);
+        const response = await window.StoxosFirebase.saveResult(type, correct, total, activeTestId, breakdown);
         startedTests = response.completed;
         isPremium = response.premium;
         activeTestId = null;
@@ -532,23 +576,104 @@ function handleStripeReturn() {
 }
 handleStripeReturn();
 
+// Τα παλιά αποτελέσματα δεν περιείχαν ανά κατηγορία δεδομένα.
+// Δεν συμπεραίνουμε κατηγορίες ούτε δημιουργούμε τεχνητό ιστορικό.
+function insightScore(correct, total) {
+    return total > 0 ? Math.round(100 * correct / total) : null;
+}
+function insightNumber(value) { return Number(value || 0).toLocaleString('el-GR'); }
+function insightDate(value) {
+    const date = new Date(value || '');
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('el-GR', {day:'numeric', month:'short', year:'numeric'});
+}
+function insightCategories(record) {
+    if (record.type === 'inductive') return {title:'Επαγωγικός συλλογισμός', detail:'Τεστ σχημάτων · Προσαρμοζόμενη δυσκολία', legacy:false};
+    const counts = record.categoryTotal;
+    if (!Array.isArray(counts) || counts.length !== KNOWLEDGE_CATEGORY_ORDER.length || !counts.some(n => n > 0)) {
+        return {title:'Τεστ γνώσεων', detail:'Δεν έχει καταγραφεί ανάλυση ενοτήτων', legacy:true};
+    }
+    const categoryNames = KNOWLEDGE_CATEGORY_ORDER.filter((_,i) => counts[i] > 0);
+    if (categoryNames.length === 1) return {title:categoryNames[0], detail:'Μία γνωστική ενότητα', legacy:false};
+    return {title:'Μικτό τεστ γνώσεων', detail:`${categoryNames.length} γνωστικές ενότητες · ${categoryNames.slice(0,2).join(' / ')}${categoryNames.length > 2 ? ' κ.ά.' : ''}`, legacy:false};
+}
+function insightHistoryCard(record) {
+    const score=insightScore(record.correct, record.total);
+    const context=insightCategories(record);
+    const kind = record.type === 'inductive' ? 'ΣΧΗΜΑΤΑ' : 'ΓΝΩΣΕΙΣ';
+    const quality = score === null ? '' : score >= 70 ? 'is-good' : score < 40 ? 'is-low' : '';
+    return `<article class="insight-result-card" aria-label="${escapeHtml(context.title)}, ${score ?? 'χωρίς'} τοις εκατό">
+        <div class="insight-result-main">
+            <div class="insight-result-content">
+                <span class="insight-result-type">${kind}</span>
+                <h3>${escapeHtml(context.title)}</h3>
+                <p class="insight-result-context">${escapeHtml(context.detail)}</p>
+                <p class="insight-result-meta">${escapeHtml(insightDate(record.at))} <span aria-hidden="true">·</span> ${insightNumber(record.correct)} / ${insightNumber(record.total)} σωστές</p>
+            </div>
+            <div class="insight-result-score ${quality}"><strong>${score === null ? '—' : score + '%'}</strong><span>Επίδοση</span></div>
+        </div>
+        <div class="insight-result-track" role="progressbar" aria-label="Ποσοστό επίδοσης" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${score ?? 0}"><div style="width:${score ?? 0}%"></div></div>
+    </article>`;
+}
+function setInsightHistoryFilter(kind) {
+    if (!['all','knowledge','inductive'].includes(kind)) return;
+    insightHistoryFilter = kind;
+    showInsights();
+}
+function openInsights() {
+    insightHistoryFilter = 'all';
+    showInsights();
+}
 function showInsights() {
     if (!requireAccount('Για να δεις την πρόοδό σου χρειάζεται σύνδεση.')) return;
-    // Στη δοκιμαστική έκδοση προβάλλονται τα δεδομένα του ίδιου λογαριασμού.
-    const results = [...accessData().history];
-    const average = results.length
-        ? Math.round(results.reduce((sum, record) => sum + 100 * record.correct / Math.max(1, record.total), 0) / results.length) : null;
-    const rows = results.map(record => {
-        const score = Math.round(100 * record.correct / Math.max(1, record.total));
-        const date = new Date(record.at);
-        const dateLabel = Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('el-GR');
-        return `<div class="insight-row"><span>${record.type === 'inductive' ? 'Τεστ σχημάτων' : 'Τεστ γνώσεων'}<small>${dateLabel} • ${record.correct}/${record.total} σωστές</small></span><div class="insight-progress"><div style="width:${score}%"></div></div><strong>${score}%</strong></div>`;
+    const stats = cloudAnalytics;
+    const full = stats ? {
+        tests: stats.knowledgeTests + stats.inductiveTests,
+        correct: stats.knowledgeCorrect + stats.inductiveCorrect,
+        total: stats.knowledgeTotal + stats.inductiveTotal,
+        best: Math.max(stats.knowledgeBest, stats.inductiveBest)
+    } : {tests:0,correct:0,total:0,best:0};
+    const overall = insightScore(full.correct,full.total);
+    const historical = [...accessData().history];
+    const filtered = insightHistoryFilter === 'all' ? historical : historical.filter(r=>r.type === insightHistoryFilter);
+    const catCorrect = Array.isArray(stats?.categoryCorrect) ? stats.categoryCorrect : Array(11).fill(0);
+    const catTotal = Array.isArray(stats?.categoryTotal) ? stats.categoryTotal : Array(11).fill(0);
+    const knownCategoryTotal = catTotal.reduce((a,b)=>a+b,0);
+    const knowledgeRate = insightScore(stats?.knowledgeCorrect || 0, stats?.knowledgeTotal || 0);
+    const inductiveRate = insightScore(stats?.inductiveCorrect || 0, stats?.inductiveTotal || 0);
+    const categories = KNOWLEDGE_CATEGORY_ORDER.map((name,i)=>{
+        const correct=catCorrect[i] || 0, total=catTotal[i] || 0;
+        const pct=insightScore(correct,total);
+        return `<div class="insight-category-row">
+            <div class="insight-category-top"><div class="insight-category-name"><strong>${escapeHtml(name)}</strong><small>${total ? `${insightNumber(correct)} / ${insightNumber(total)} σωστές` : 'Δεν υπάρχουν ακόμη αποτελέσματα'}</small></div>
+                <strong class="insight-category-pct">${pct === null ? '—' : pct + '%'}</strong></div>
+            <div class="insight-category-track"><div style="width:${pct ?? 0}%"></div></div>
+        </div>`;
     }).join('');
-    app.innerHTML = `<p class="home-kicker">ΠΡΟΟΔΟΣ • FIRESTORE</p><h1>Η πρόοδός σου</h1>
-        <div class="insight-summary"><div><strong>${results.length}</strong><span>Ολοκληρωμένα τεστ (έως 50)</span></div><div><strong>${average === null ? '—' : average + '%'}</strong><span>Μέση επίδοση</span></div></div>
-        <h2>Αποτελέσματα ανά τεστ</h2>
-        ${results.length ? `<div class="insight-list">${rows}</div>` : `<p class="muted">${cloudHistoryLoaded ? 'Δεν υπάρχουν ακόμη ολοκληρωμένα τεστ.' : 'Φόρτωση ιστορικού...'}</p>`}
-        <div class="actions"><button class="secondary" onclick="home()">Αρχική</button><button onclick="showPricing()">Πακέτα</button></div>`;
+    const filterButton = (value,label) => `<button type="button" class="insight-filter ${insightHistoryFilter === value ? 'is-selected' : ''}" aria-pressed="${insightHistoryFilter === value}" onclick="setInsightHistoryFilter('${value}')">${label}</button>`;
+    const legacy = historical.filter(r=>r.type === 'knowledge' && (!Array.isArray(r.categoryTotal) || r.categoryTotal.length !== 11)).length;
+    app.innerHTML = `<section class="insights-dashboard">
+        <p class="home-kicker">ΛΟΓΑΡΙΑΣΜΟΣ · ΑΝΑΛΥΣΗ ΕΠΙΔΟΣΕΩΝ</p>
+        <h1>Η πρόοδός σου</h1>
+        <p class="insight-intro">Μια καθαρή εικόνα της εξάσκησής σου και των ενοτήτων που χρειάζονται περισσότερη προσοχή.</p>
+        <div class="insight-summary" aria-label="Συνολική επίδοση">
+            <div><span>Αναλυμένα τεστ</span><strong>${insightNumber(full.tests)}</strong><small>Από την ενεργοποίηση των νέων στατιστικών</small></div>
+            <div><span>Ερωτήσεις</span><strong>${insightNumber(full.total)}</strong><small>${insightNumber(full.correct)} σωστές συνολικά</small></div>
+            <div><span>Συνολική επιτυχία</span><strong>${overall === null ? '—' : overall + '%'}</strong><small>Με βάση όλες τις νέες απαντήσεις</small></div>
+            <div><span>Καλύτερη επίδοση</span><strong>${full.tests ? full.best + '%' : '—'}</strong><small>Σε ένα ολοκληρωμένο τεστ</small></div>
+        </div>
+        <p class="insight-scope-note">Οι συγκεντρωτικοί δείκτες υπολογίζονται από τα τεστ που ολοκληρώθηκαν μετά την ενεργοποίηση αυτής της λειτουργίας. Το παλιό ιστορικό παραμένει παρακάτω.</p>
+        <div class="insight-section-heading"><div><h2>Επίδοση ανά κατηγορία</h2><p>Γνώσεις · 11 γνωστικές ενότητες</p></div><span class="insight-section-counter">${insightNumber(knownCategoryTotal)} απαντήσεις</span></div>
+        <div class="insight-category-list">${categories}</div>
+        <section class="insight-inductive" aria-label="Επαγωγικός συλλογισμός">
+            <div><span class="insight-result-type">ΞΕΧΩΡΙΣΤΗ ΑΝΑΛΥΣΗ</span><h2>Επαγωγικός συλλογισμός</h2><p>Αποτελέσματα από τα τεστ σχημάτων</p></div>
+            <div class="insight-inductive-metrics"><span><strong>${insightNumber(stats?.inductiveTests || 0)}</strong> τεστ</span><span><strong>${insightNumber(stats?.inductiveCorrect || 0)}/${insightNumber(stats?.inductiveTotal || 0)}</strong> σωστές</span><span><strong>${inductiveRate === null ? '—' : inductiveRate + '%'}</strong> επίδοση</span></div>
+        </section>
+        <div class="insight-section-heading insight-history-heading"><div><h2>Ιστορικό τεστ</h2><p>Έως 50 πρόσφατα αποτελέσματα</p></div><span class="insight-section-counter">${cloudHistoryLoaded ? historical.length : '…'} τεστ</span></div>
+        <div class="insight-history-filters" aria-label="Φίλτρο ιστορικού">${filterButton('all','Όλα')}${filterButton('knowledge','Γνώσεις')}${filterButton('inductive','Σχήματα')}</div>
+        ${filtered.length ? `<div class="insight-list">${filtered.map(insightHistoryCard).join('')}</div>` : `<p class="muted">${cloudHistoryLoaded ? 'Δεν υπάρχουν αποτελέσματα για αυτό το φίλτρο.' : 'Φόρτωση ιστορικού...'}</p>`}
+        ${legacy ? `<p class="insight-scope-note">Σε ${insightNumber(legacy)} παλαιότερα τεστ γνώσεων δεν είχε αποθηκευτεί η κατηγορία, γι’ αυτό εμφανίζονται χωρίς αναλυτική κατανομή.</p>` : ''}
+        <div class="actions insight-actions"><button class="secondary" onclick="showAccount()">← Λογαριασμός</button><button onclick="showActivityMenu('test')">Νέο τεστ</button></div>
+    </section>`;
 }
 
 // Προστασία όταν εμφανίζουμε κείμενο από τις ερωτήσεις ως HTML.
@@ -568,19 +693,7 @@ function escapeHtml(value) {
 
 // Δημιουργούμε τις επιλογές κατηγορίας για Τεστ και Εκμάθηση.
 function categoryOptions() {
-    const officialOrder = [
-        "Συνταγματικό Δίκαιο",
-        "Διοικητικό Δίκαιο",
-        "Ευρωπαϊκοί Θεσμοί και Δίκαιο",
-        "Οικονομικές Επιστήμες",
-        "Πληροφορική και Ψηφιακή Διακυβέρνηση",
-        "Σύγχρονη Ιστορία της Ελλάδος",
-        "Κώδικας Κατάστασης Πολιτικών Διοικητικών Υπαλλήλων και Υπαλλήλων Ν.Π.Δ.Δ.",
-        "Γενικός Κανονισμός για την Προστασία των Δεδομένων (GDPR)",
-        "Διοίκηση Επιχειρήσεων και Οργανισμών",
-        "Διοίκηση Ανθρώπινου Δυναμικού",
-        "Κώδικας Συμπεριφοράς Δημοσίων Υπαλλήλων"
-    ];
+    const officialOrder = KNOWLEDGE_CATEGORY_ORDER;
     const categories = [...new Set(BANK.map((question) => question.category))];
     categories.sort((a, b) => officialOrder.indexOf(a) - officialOrder.indexOf(b));
 
@@ -622,7 +735,7 @@ function home() {
                     <p class="muted">${premiumDemoEnabled() ? 'Ειδική πρόσβαση Premium στον λογαριασμό σου.' : 'Το όριο είναι κοινό για τεστ γνώσεων και σχημάτων. Μετρά κάθε επιτυχημένη ολοκλήρωση.'}</p>
                 </div>
                 <div class="access-actions">
-                    <button class="secondary" onclick="showInsights()">Η πρόοδός μου</button>
+                    <button class="secondary" onclick="openInsights()">Η πρόοδός μου</button>
                     <button onclick="showPricing()">Δες τα πακέτα</button>
                 </div>
             </section>` : ''}
@@ -697,7 +810,11 @@ function showAccount() {
     }
     const user = authIdentity();
     const results = accessData().history;
-    const avg = results.length ? Math.round(results.reduce((sum,r)=>sum+100*r.correct/Math.max(1,r.total),0)/results.length) : null;
+    const overview = cloudAnalytics;
+    const recentAverage = results.length ? Math.round(results.reduce((sum,r)=>sum+100*r.correct/Math.max(1,r.total),0)/results.length) : null;
+    const totalQuestions = overview ? overview.knowledgeTotal + overview.inductiveTotal : 0;
+    const totalCorrect = overview ? overview.knowledgeCorrect + overview.inductiveCorrect : 0;
+    const allAverage = insightScore(totalCorrect,totalQuestions);
     app.innerHTML = `<section class="account-page">
         <p class="home-kicker">Ο ΛΟΓΑΡΙΑΣΜΟΣ ΜΟΥ</p>
         <h1>Λογαριασμός</h1>
@@ -705,12 +822,15 @@ function showAccount() {
             <span class="account-avatar" aria-hidden="true">${escapeHtml((user.displayName || user.email || 'G').trim().charAt(0).toUpperCase())}</span>
             <div class="account-profile-copy"><strong>${escapeHtml(user.displayName || 'Χρήστης Google')}</strong><small>${escapeHtml(user.email || '')}</small></div>
         </div>
+        <div class="account-overview-heading"><h2>Σύνοψη εξάσκησης</h2><span class="account-access-pill ${premiumDemoEnabled() ? 'is-premium' : ''}">${premiumDemoEnabled() ? 'Premium' : 'Δωρεάν'}</span></div>
         <div class="account-stats">
-            <div><strong>${cloudHistoryLoaded ? results.length : '—'}</strong><span>Πρόσφατα τεστ (έως 50)</span></div>
-            <div><strong>${avg === null ? '—' : avg + '%'}</strong><span>Μέση επίδοση (έως 50)</span></div>
+            <div><strong>${cloudHistoryLoaded ? insightNumber(results.length) : '—'}</strong><span>Πρόσφατα τεστ</span></div>
+            <div><strong>${allAverage !== null ? allAverage + '%' : (recentAverage === null ? '—' : recentAverage + '%')}</strong><span>${allAverage !== null ? 'Επίδοση νέων τεστ' : 'Μέση επίδοση πρόσφατων'}</span></div>
+            <div><strong>${overview ? insightNumber(totalQuestions) : '—'}</strong><span>Αναλυμένες απαντήσεις</span></div>
         </div>
+        <p class="account-stats-footnote">Εμφανίζονται έως 50 πρόσφατα τεστ. Τα αναλυτικά στατιστικά καταγράφονται από την ενεργοποίηση της νέας λειτουργίας.</p>
         <div class="account-links">
-            <button class="activity-menu-item" onclick="showInsights()"><span class="activity-menu-copy"><strong>Η πρόοδός μου</strong><small>Αποτελέσματα και επιδόσεις</small></span><span class="activity-menu-arrow">›</span></button>
+            <button class="activity-menu-item" onclick="openInsights()"><span class="activity-menu-copy"><strong>Η πρόοδός μου</strong><small>Στατιστικά 11 κατηγοριών και ιστορικό τεστ</small></span><span class="activity-menu-arrow">›</span></button>
             <button class="activity-menu-item" onclick="showPricing()"><span class="activity-menu-copy"><strong>Το πακέτο μου</strong><small>${premiumDemoEnabled() ? 'Premium • Απεριόριστα τεστ' : `Δωρεάν • ${freeTestsRemaining()} τεστ απομένουν`}</small></span><span class="activity-menu-arrow">›</span></button>
         </div>
         <button class="secondary account-logout" onclick="logoutStoxos()">Αποσύνδεση</button>
@@ -1038,7 +1158,7 @@ async function finish() {
     const unansweredCount = answers.filter((answer) => answer === null).length;
     const percentage = Math.round((correctCount / QUESTIONS_PER_TEST) * 100);
     if (!await flushProgress()) return;
-    if (!await saveTestResult('knowledge', correctCount, QUESTIONS_PER_TEST)) return;
+    if (!await saveTestResult('knowledge', correctCount, QUESTIONS_PER_TEST, buildKnowledgeBreakdown(test, answers))) return;
     knowledgeResultLogged = true;
 
     const reviewHtml = test.map((question, index) => {
@@ -1064,7 +1184,7 @@ async function finish() {
         <h1>Αποτέλεσμα τεστ</h1>
         <h2>${correctCount} / ${QUESTIONS_PER_TEST} σωστές · ${percentage}%</h2>
         <p class="muted">Αναπάντητες: ${unansweredCount}</p>
-        <div class="actions"><button onclick="home()">Αρχική οθόνη</button><button class="secondary" onclick="showInsights()">Αναλυτική πρόοδος</button></div>
+        <div class="actions"><button onclick="home()">Αρχική οθόνη</button><button class="secondary" onclick="openInsights()">Αναλυτική πρόοδος</button></div>
         <h3>Ανασκόπηση απαντήσεων</h3>
         ${reviewHtml}
     `;
@@ -1354,7 +1474,7 @@ async function nextInductiveQuestion() {
             <h2>${inductiveCorrect} / ${inductiveTotal} σωστές</h2>
             ${reachedLimit ? `<p class="muted">Ολοκληρώθηκαν και οι ${INDUCTIVE_TEST_LENGTH} ερωτήσεις του τεστ.</p><p class="muted">Ποσοστό επιτυχίας: ${Math.round(100 * inductiveCorrect / inductiveTotal)}%</p>` : `<p class="muted">Ολοκληρώθηκαν όλες οι διαθέσιμες ερωτήσεις χωρίς επανάληψη.</p>`}
             <div class="actions"><button class="secondary" onclick="home()">Αρχική</button>
-            ${inductiveMode === 'test' ? '<button class="secondary" onclick="showInsights()">Αναλυτική πρόοδος</button>' : ''}
+            ${inductiveMode === 'test' ? '<button class="secondary" onclick="openInsights()">Αναλυτική πρόοδος</button>' : ''}
             <button onclick="inductiveMenu('${inductiveMode}')">Νέα προσπάθεια</button></div>
         `;
         return;

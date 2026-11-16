@@ -16,20 +16,23 @@ service cloud.firestore {
     function activePath(uid) {return /databases/$(database)/documents/users/$(uid)/active/current;}
     function attemptValid() {
       let d=request.resource.data;
-      return d.keys().hasOnly(['id','type','questionIds','answers','position','level','correct','total','currentId','selected','answered','updatedAt'])
+      return d.keys().hasOnly(['id','type','questionIds','answers','position','level','correct','total','currentId','selected','answered','timed','startedAt','updatedAt'])
         && d.keys().hasAll(['id','type','questionIds','answers','position','level','correct','total','currentId','selected','answered','updatedAt'])
         && d.id is string && d.id.matches('[a-f0-9-]{36}')
         && d.type in ['knowledge','inductive']
-        && d.questionIds is list && d.questionIds.size() >= 1 && d.questionIds.size() <= 25
-        && d.answers is list && d.answers.size() <= 25
-        && d.position is int && d.position >= 0 && d.position < 25
+        && d.questionIds is list && d.questionIds.size() >= 1 && d.questionIds.size() <= 50
+        && d.answers is list && d.answers.size() <= 50
+        && d.position is int && d.position >= 0 && d.position < 50
         && d.level is int && d.level >= 0 && d.level <= 10
         && d.correct is int && d.correct >= 0 && d.correct <= 18
         && d.total is int && d.total >= 0 && d.total <= 18
         && d.currentId is string && d.currentId.size() <= 30
         && (d.selected == null || (d.selected is int && d.selected >= 0 && d.selected < 5))
         && d.answered is bool && d.updatedAt == request.time
-        && ((d.type == 'knowledge' && d.questionIds.size() == 25 && d.answers.size() == 25 && d.level == 0 && d.total == 0 && d.correct == 0 && d.currentId == '')
+        && (!('timed' in d) || d.timed is bool)
+        && (!('startedAt' in d) || d.startedAt is timestamp)
+        && (d.get('timed',false) != true || 'startedAt' in d)
+        && ((d.type == 'knowledge' && d.questionIds.size() in [10,25,50] && d.answers.size() == d.questionIds.size() && d.position < d.questionIds.size() && d.level == 0 && d.total == 0 && d.correct == 0 && d.currentId == '')
           || (d.type == 'inductive' && d.questionIds.size() <= 18 && d.answers.size() == 0 && d.position == 0 && d.level >= 1 && d.currentId.size() > 0));
     }
     function count11(v) {
@@ -51,12 +54,15 @@ service cloud.firestore {
     }
     function resultFields() {
       let d = request.resource.data;
-      return d.keys().hasOnly(['type', 'correct', 'total', 'at', 'categoryCorrect', 'categoryTotal'])
+      return d.keys().hasOnly(['type', 'correct', 'total', 'at', 'categoryCorrect', 'categoryTotal', 'timed', 'elapsedSeconds'])
         && d.keys().hasAll(['type', 'correct', 'total', 'at'])
         && d.type in ['knowledge', 'inductive']
         && d.correct is int && d.total is int
-        && ((d.type == 'knowledge' && d.total == 25) || (d.type == 'inductive' && d.total == 18))
+        && ((d.type == 'knowledge' && d.total in [10,25,50]) || (d.type == 'inductive' && d.total == 18))
         && d.correct >= 0 && d.correct <= d.total && d.at == request.time
+        && (!('timed' in d) || d.timed is bool)
+        && (!('elapsedSeconds' in d) || (d.elapsedSeconds is int && d.elapsedSeconds >= 0
+          && d.elapsedSeconds <= (d.type == 'knowledge' ? d.total * 60 : 1500)))
         // Παλιοί clients: επιτρέπουμε το αρχικό αποτέλεσμα χωρίς ανάλυση.
         && ((!('categoryCorrect' in d) && !('categoryTotal' in d))
           || ('categoryCorrect' in d && 'categoryTotal' in d
@@ -84,7 +90,8 @@ service cloud.firestore {
         && d.inductiveBest is int && d.inductiveBest >= 0 && d.inductiveBest <= 100
         && d.knowledgeCorrect <= d.knowledgeTotal
         && d.inductiveCorrect <= d.inductiveTotal
-        && d.knowledgeTotal == d.knowledgeTests * 25
+        && d.knowledgeTotal >= d.knowledgeTests * 10
+        && d.knowledgeTotal <= d.knowledgeTests * 50
         && d.inductiveTotal == d.inductiveTests * 18
         && count11(d.categoryCorrect) && count11(d.categoryTotal)
         && lessEqual11(d.categoryCorrect, d.categoryTotal)
@@ -140,13 +147,17 @@ service cloud.firestore {
         allow get: if attemptDoc == 'current' && signed(uid);
         allow list: if false;
         allow create: if attemptDoc == 'current' && signed(uid) && attemptValid()
+          && (!('startedAt' in request.resource.data) || request.resource.data.startedAt == request.time)
           && (premium(uid) || (get(profilePath(uid)).data.started is int && get(profilePath(uid)).data.started < 5));
         // Συνέχιση ίδιας προσπάθειας ή αντικατάσταση από "Νέο τεστ".
         // Αλλαγή ID επιτρέπεται μόνο με διαθέσιμη δωρεάν πρόσβαση ή Premium.
         allow update: if attemptDoc == 'current' && signed(uid) && attemptValid()
           && ((request.resource.data.id == resource.data.id
-                && request.resource.data.type == resource.data.type)
+                && request.resource.data.type == resource.data.type
+                && (!('startedAt' in resource.data) || request.resource.data.startedAt == resource.data.startedAt)
+                && (!('timed' in resource.data) || request.resource.data.timed == resource.data.timed))
               || (request.resource.data.id != resource.data.id
+                && (!('startedAt' in request.resource.data) || request.resource.data.startedAt == request.time)
                 && (premium(uid) || (get(profilePath(uid)).data.started is int
                   && get(profilePath(uid)).data.started < 5))));
         allow delete: if attemptDoc == 'current' && signed(uid);

@@ -1,7 +1,11 @@
 // Πρόγραμμα εξάσκησης ΑΣΕΠ.
 // Το BANK περιέχει τις ερωτήσεις από το αρχείο questions.js.
 
-const QUESTIONS_PER_TEST = 25;
+const QUESTIONS_PER_TEST = 25; // Προεπιλογή για τα τεστ γνώσεων.
+const KNOWLEDGE_TEST_SIZES = [10, 25, 50];
+let knowledgeTestLength = QUESTIONS_PER_TEST;
+let selectedKnowledgeTimed = false;
+let selectedInductiveTimed = false;
 const ANSWER_LETTERS = ["Α", "Β", "Γ", "Δ"];
 const app = document.getElementById("app");
 
@@ -170,6 +174,85 @@ let progressQueue = Promise.resolve();
 let progressError = false;
 let resumeSession = 0;
 
+// Το ρολόι βασίζεται στο startedAt του Firestore. Συνεχίζει να μετρά όταν η
+// εφαρμογή είναι στο παρασκήνιο, χωρίς να μηδενίζεται στην επανασύνδεση.
+let activeExamTimer = null;
+let examTimerInterval = null;
+let timerExpiryStarted = false;
+let knowledgeFinishing = false;
+function timestampMillis(value) {
+    if (value && typeof value.toMillis === 'function') return value.toMillis();
+    if (value && typeof value.seconds === 'number') return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1e6);
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    return NaN;
+}
+function stopExamTimer() {
+    if (examTimerInterval !== null) clearInterval(examTimerInterval);
+    examTimerInterval = null;
+    activeExamTimer = null;
+    timerExpiryStarted = false;
+}
+function setupExamTimer(record) {
+    stopExamTimer();
+    if (!record?.timed) return;
+    const startedAt = timestampMillis(record.startedAt);
+    if (!Number.isFinite(startedAt)) throw Error('Δεν βρέθηκε η ώρα έναρξης του τεστ. Δοκίμασε «Συνέχεια τεστ».');
+    const seconds = record.type === 'inductive' ? 25 * 60 : record.questionIds.length * 60;
+    activeExamTimer = {id:record.id, kind:record.type, startedAt, durationSeconds:seconds};
+    examTimerInterval = setInterval(refreshExamTimer, 1000);
+}
+// Νέο τεστ: μετά την επιτυχημένη εγγραφή στο Firestore αρχίζει νέο, πλήρες
+// χρονικό όριο. Δεν ξαναδιαβάζουμε αμέσως το active/current, επειδή μια
+// παλιότερη τοπική εικόνα μπορεί να εμφανιστεί αντί της νέας προσπάθειας.
+// Σε «Συνέχεια τεστ» χρησιμοποιείται το μόνιμο startedAt από τον server.
+function startFreshExamTimer(attempt) {
+    if (!attempt.timed) { stopExamTimer(); return; }
+    setupExamTimer({...attempt, startedAt: Date.now()});
+}
+function secondsRemaining() {
+    if (!activeExamTimer || !activeTestId || activeExamTimer.id !== activeTestId) return null;
+    return Math.max(0, Math.ceil((activeExamTimer.startedAt + activeExamTimer.durationSeconds*1000 - Date.now()) / 1000));
+}
+function examTimeExpired() {return secondsRemaining() === 0;}
+function examTimerHtml() {
+    if (!activeExamTimer || activeExamTimer.id !== activeTestId) return '';
+    return `<div class="exam-timer" data-exam-timer role="timer" aria-label="Χρόνος που απομένει">
+        <span>Υπολειπόμενος χρόνος</span><strong id="exam-time-left">--:--</strong></div>`;
+}
+function refreshExamTimer() {
+    const remain = secondsRemaining();
+    if (remain === null) return;
+    const text = `${String(Math.floor(remain/60)).padStart(2,'0')}:${String(remain%60).padStart(2,'0')}`;
+    const timer = document.querySelector('[data-exam-timer]');
+    const label = document.getElementById('exam-time-left');
+    if (label) label.textContent = text;
+    if (timer) timer.classList.toggle('is-urgent',remain<=60);
+    // Αν ο χρήστης επέστρεψε στο μενού, δεν διακόπτουμε την οθόνη του.
+    // Το ήδη ληγμένο τεστ καταχωρίζεται μόλις ζητήσει «Συνέχεια».
+    if (remain === 0 && timer && !timerExpiryStarted) expireTimedTest();
+}
+function currentTimeMetadata() {
+    if (!activeExamTimer) return {timed:false, elapsedSeconds:0};
+    return {timed:true, elapsedSeconds:Math.max(0, Math.min(activeExamTimer.durationSeconds,
+        Math.floor((Date.now() - activeExamTimer.startedAt)/1000)))};
+}
+async function expireTimedTest() {
+    if (!examTimeExpired() || timerExpiryStarted || !activeTestId) return;
+    timerExpiryStarted = true;
+    try {
+        if (activeExamTimer?.kind === 'knowledge') await finish(true);
+        else if (activeExamTimer?.kind === 'inductive') await finishExpiredInductive();
+    } finally {
+        // Σε αποτυχία αποθήκευσης προσφέρουμε χειροκίνητη επανάληψη.
+        timerExpiryStarted = false;
+        if (examTimeExpired() && document.getElementById('exam-time-left')) {
+            const timer = document.querySelector('[data-exam-timer]');
+            if (timer) timer.replaceWith(document.createRange().createContextualFragment(
+                `<p class="exam-expired-error">Ο χρόνος έληξε. Αν η αποθήκευση απέτυχε, πάτησε <button type="button" onclick="expireTimedTest()">Ολοκλήρωση ξανά</button>.</p>`));
+        }
+    }
+}
+
 function firebaseAttemptChanged(record) {
     savedAttempt = record || null;
     if (document.querySelector('.home-dashboard')) home();
@@ -180,12 +263,12 @@ function queueAttemptSave() {
     const uid = currentUser.uid;
     const state = inductiveMode === 'test' && inductiveActiveTest ? {
         id, type:'inductive', questionIds: [...inductiveSeen], answers:[], position:0,
-        level:inductiveLevel, correct:inductiveCorrect, total:inductiveTotal,
+        level:inductiveLevel, correct:inductiveCorrect, total:inductiveTotal, timed:selectedInductiveTimed,
         currentId:inductiveCurrent?.id || '', selected:inductiveSelected,
         answered:inductiveAnswered
     } : {
         id, type:'knowledge', questionIds:test.map(q=>q.id), answers:[...answers], position,
-        level:0, correct:0, total:0, currentId:'', selected:null, answered:knowledgeChecked
+        level:0, correct:0, total:0, timed:selectedKnowledgeTimed, currentId:'', selected:null, answered:knowledgeChecked
     };
     // Διαδοχικές ενημερώσεις, ώστε παλιότερη αποθήκευση να μην υπερισχύσει νεότερης.
     progressQueue = progressQueue.catch(()=>{}).then(async()=>{
@@ -204,7 +287,7 @@ async function flushProgress() {
 function resumeBanner() {
     if (!authIdentity() || !savedAttempt) return '';
     const name = savedAttempt.type === 'knowledge' ? 'Τεστ γνώσεων' : 'Τεστ σχημάτων';
-    const n = savedAttempt.type === 'knowledge' ? Math.min(25,(savedAttempt.position||0)+1) : Math.min(18,(savedAttempt.total||0)+1);
+    const n = savedAttempt.type === 'knowledge' ? Math.min(savedAttempt.questionIds?.length || 25,(savedAttempt.position||0)+1) : Math.min(18,(savedAttempt.total||0)+1);
     return `<section class="access-strip access-strip-compact" aria-label="Ημιτελές τεστ">
         <div class="access-compact-info"><span class="access-label">ΣΥΝΕΧΕΙΑ ΤΕΣΤ</span>
         <strong>${name}</strong><span class="access-compact-meta">Ερώτηση ${n}</span></div>
@@ -222,14 +305,19 @@ async function resumeSavedTest() {
         savedAttempt=state;
         activeTestId=state.id;
         progressError=false;
+        selectedKnowledgeTimed = state.type === 'knowledge' && state.timed === true;
+        selectedInductiveTimed = state.type === 'inductive' && state.timed === true;
+        setupExamTimer(state);
         if (state.type === 'knowledge') {
             const byId=new Map(BANK.map(q=>[q.id,q]));
             test=state.questionIds.map(id=>byId.get(id));
-            if (test.length!==QUESTIONS_PER_TEST || test.some(q=>!q)) throw Error('Δεν βρέθηκαν όλες οι ερωτήσεις του αποθηκευμένου τεστ.');
+            if (!KNOWLEDGE_TEST_SIZES.includes(test.length) || test.some(q=>!q)) throw Error('Δεν βρέθηκαν όλες οι ερωτήσεις του αποθηκευμένου τεστ.');
+            knowledgeTestLength=test.length;
             answers=state.answers.slice(); position=state.position;
             knowledgeChecked=!!state.answered;
             knowledgeResultLogged=false; inductiveActiveTest=false;
             show();
+            refreshExamTimer();
         } else {
             const byId=new Map(INDUCTIVE_QUESTIONS.map(q=>[q.id,q]));
             inductiveMode='test'; inductiveActiveTest=true; inductiveResultLogged=false;
@@ -240,7 +328,8 @@ async function resumeSavedTest() {
             if (!inductiveCurrent) throw Error('Δεν βρέθηκε το αποθηκευμένο σχήμα.');
             showInductive();
             if (inductiveAnswered) showInductiveFeedback();
-            else if (inductiveSelected!==null) chooseInductive(inductiveSelected);
+            else if (inductiveSelected!==null && !examTimeExpired()) chooseInductive(inductiveSelected);
+            refreshExamTimer();
         }
     } catch(err) { console.error(err); alert('Αποτυχία ανάκτησης του τεστ: '+(err.message||err)); home(); }
     finally { resumeLoading=false; }
@@ -252,6 +341,7 @@ async function discardSavedTest() {
         await progressQueue;
         await window.StoxosFirebase.deleteAttempt(savedAttempt.id);
         savedAttempt=null; activeTestId=null; inductiveActiveTest=false;
+        stopExamTimer();
         home();
     } catch(err) { alert('Δεν έγινε διαγραφή: '+(err.message||err)); }
 }
@@ -279,6 +369,7 @@ function firebaseAuthChanged(user) {
         uid: user.uid, email: user.email || '', displayName: user.displayName || ''
     } : null;
     if (oldUid !== (currentUser && currentUser.uid)) {
+        stopExamTimer();
         subscriptionDetailsRequest++;
         startedTests = 0;
         cloudHistory = [];
@@ -427,11 +518,12 @@ async function saveTestResult(type, correct, total, breakdown = null) {
     if (!authIdentity() || !window.StoxosFirebase || !activeTestId || resultSaving) return false;
     resultSaving = true;
     try {
-        const response = await window.StoxosFirebase.saveResult(type, correct, total, activeTestId, breakdown);
+        const response = await window.StoxosFirebase.saveResult(type, correct, total, activeTestId, breakdown, currentTimeMetadata());
         startedTests = response.completed;
         isPremium = response.premium;
         activeTestId = null;
         savedAttempt = null;
+        stopExamTimer();
         return true;
     } catch (error) {
         console.error('Αδυναμία καταχώρισης αποτελέσματος:', error);
@@ -601,13 +693,14 @@ function insightHistoryCard(record) {
     const context=insightCategories(record);
     const kind = record.type === 'inductive' ? 'ΣΧΗΜΑΤΑ' : 'ΓΝΩΣΕΙΣ';
     const quality = score === null ? '' : score >= 70 ? 'is-good' : score < 40 ? 'is-low' : '';
+    const durationText = record.timed === true ? `Με χρόνο (${record.type === 'inductive' ? 25 : record.total}′)` : record.timed === false ? 'Χωρίς χρόνο' : '';
     return `<article class="insight-result-card" aria-label="${escapeHtml(context.title)}, ${score ?? 'χωρίς'} τοις εκατό">
         <div class="insight-result-main">
             <div class="insight-result-content">
                 <span class="insight-result-type">${kind}</span>
                 <h3>${escapeHtml(context.title)}</h3>
                 <p class="insight-result-context">${escapeHtml(context.detail)}</p>
-                <p class="insight-result-meta">${escapeHtml(insightDate(record.at))} <span aria-hidden="true">·</span> ${insightNumber(record.correct)} / ${insightNumber(record.total)} σωστές</p>
+                <p class="insight-result-meta">${escapeHtml(insightDate(record.at))} <span aria-hidden="true">·</span> ${insightNumber(record.correct)} / ${insightNumber(record.total)} σωστές${durationText ? ` <span aria-hidden="true">·</span> ${durationText}` : ''}</p>
             </div>
             <div class="insight-result-score ${quality}"><strong>${score === null ? '—' : score + '%'}</strong><span>Επίδοση</span></div>
         </div>
@@ -914,6 +1007,8 @@ function selectMode(mode) {
 
     if (!isStudy) {
         selectedTestCategories = new Set(); // Κενό σύνολο = όλες οι κατηγορίες.
+        knowledgeTestLength = QUESTIONS_PER_TEST;
+        selectedKnowledgeTimed = false;
         const categories = [...new Set(BANK.map(q => q.category))];
         const options = categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join("");
         app.innerHTML = `
@@ -931,7 +1026,16 @@ function selectMode(mode) {
                 </div>
                 <div id="test-category-tags" class="test-category-tags" aria-live="polite"></div>
                 <p id="test-category-count" class="test-category-info"></p>
-                <p class="muted">${QUESTIONS_PER_TEST} τυχαίες ερωτήσεις χωρίς επανάληψη.</p>
+                <div class="exam-options">
+                    <label for="knowledge-test-length">Αριθμός ερωτήσεων</label>
+                    <select id="knowledge-test-length" onchange="changeKnowledgeTestLength()">
+                        <option value="10">10 ερωτήσεις</option>
+                        <option value="25" selected>25 ερωτήσεις (προεπιλογή)</option>
+                        <option value="50">50 ερωτήσεις</option>
+                    </select>
+                    <label class="exam-timer-choice" for="knowledge-timed"><input type="checkbox" id="knowledge-timed" onchange="selectedKnowledgeTimed=this.checked"><span><strong>Τεστ με χρονικό όριο</strong><small id="knowledge-duration-hint">25 λεπτά, αν ενεργοποιηθεί</small></span></label>
+                </div>
+                <p class="muted">Τυχαίες ερωτήσεις χωρίς επανάληψη.</p>
                 <p class="muted">${premiumDemoEnabled() ? 'Premium: απεριόριστα τεστ.' : `Διαθέσιμες δωρεάν προσπάθειες: ${freeTestsRemaining()}. Κάθε ολοκληρωμένο τεστ μετρά μία φορά.`}</p>
                 <div class="actions">
                     <button class="secondary" onclick="home()">Αρχική</button>
@@ -961,6 +1065,13 @@ function selectMode(mode) {
 
 // Κενό σύνολο = όλες οι κατηγορίες. Μόνο για τα τεστ γνώσεων.
 let selectedTestCategories = new Set();
+function changeKnowledgeTestLength() {
+    const count=Number(document.getElementById('knowledge-test-length')?.value);
+    knowledgeTestLength=KNOWLEDGE_TEST_SIZES.includes(count)?count:QUESTIONS_PER_TEST;
+    const hint=document.getElementById('knowledge-duration-hint');
+    if (hint) hint.textContent=`${knowledgeTestLength} λεπτά, αν ενεργοποιηθεί`;
+    renderTestCategories();
+}
 
 function addTestCategory() {
     const picker = document.getElementById("test-category-select");
@@ -997,7 +1108,7 @@ function renderTestCategories() {
     document.getElementById("test-category-count").textContent =
         `${selectedTestCategories.size || new Set(BANK.map(q => q.category)).size} κατηγορίες · ${available.toLocaleString("el-GR")} διαθέσιμες ερωτήσεις`;
     const startButton = document.getElementById("test-category-start");
-    startButton.disabled = available < QUESTIONS_PER_TEST;
+    startButton.disabled = available < knowledgeTestLength;
 }
 
 function removeTestCategoryByIndex(index) {
@@ -1045,18 +1156,21 @@ function shuffle(items) {
 async function start() {
     if (!requireAccount()) return;
     const availableQuestions = selectedQuestions();
+    const chosenLength=Number(document.getElementById('knowledge-test-length')?.value);
+    knowledgeTestLength=KNOWLEDGE_TEST_SIZES.includes(chosenLength)?chosenLength:QUESTIONS_PER_TEST;
+    selectedKnowledgeTimed=document.getElementById('knowledge-timed')?.checked===true;
 
-    if (availableQuestions.length < QUESTIONS_PER_TEST) {
-        alert(`Χρειάζονται τουλάχιστον ${QUESTIONS_PER_TEST} ερωτήσεις.`);
+    if (availableQuestions.length < knowledgeTestLength) {
+        alert(`Χρειάζονται τουλάχιστον ${knowledgeTestLength} ερωτήσεις.`);
         return;
     }
     // "Νέο τεστ" σημαίνει νέα προσπάθεια, ποτέ αυτόματη συνέχιση.
     // Ο χρήστης επιλέγει "Συνέχεια τεστ" αποκλειστικά από την αρχική.
     if (attemptPending || resultSaving) return;
     attemptPending = true;
-    const newQuestions = shuffle(availableQuestions).slice(0, QUESTIONS_PER_TEST);
-    const newAnswers = Array(QUESTIONS_PER_TEST).fill(null);
-    const payload={id:newTestId(),type:'knowledge',questionIds:newQuestions.map(q=>q.id),answers:newAnswers,position:0,level:0,correct:0,total:0,currentId:'',selected:null,answered:false};
+    const newQuestions = shuffle(availableQuestions).slice(0, knowledgeTestLength);
+    const newAnswers = Array(knowledgeTestLength).fill(null);
+    const payload={id:newTestId(),type:'knowledge',questionIds:newQuestions.map(q=>q.id),answers:newAnswers,position:0,level:0,correct:0,total:0,currentId:'',selected:null,answered:false,timed:selectedKnowledgeTimed};
     try {
         // Ολοκλήρωση τυχόν εκκρεμών αποθηκεύσεων του προηγούμενου τεστ.
         if (!await flushProgress()) return;
@@ -1071,7 +1185,11 @@ async function start() {
         inductiveActiveTest=false;
         knowledgeResultLogged=false;
         progressError=false;
+        // Το beginAttempt(payload, true) αντικαθιστά πάντα κάθε προηγούμενο
+        // ημιτελές τεστ. Το νέο χρονόμετρο αρχίζει από την πλήρη διάρκειά του.
+        startFreshExamTimer(payload);
         show();
+        refreshExamTimer();
     } catch(err) { alert('Δεν ήταν δυνατή η έναρξη: '+(err.message||err)); }
     finally {attemptPending=false;}
 }
@@ -1094,8 +1212,8 @@ function show() {
         `;
     }).join("");
 
-    const progress = ((position + 1) / QUESTIONS_PER_TEST) * 100;
-    const last = position === QUESTIONS_PER_TEST - 1;
+    const progress = ((position + 1) / knowledgeTestLength) * 100;
+    const last = position === knowledgeTestLength - 1;
     const actionText = knowledgeChecked ? (last ? "Ολοκλήρωση τεστ" : "Επόμενη") : "Έλεγχος";
     const action = knowledgeChecked ? "next()" : "checkKnowledgeAnswer()";
     const feedback = knowledgeChecked ? `<div class="knowledge-feedback ${isCorrect ? 'knowledge-success' : 'knowledge-error'}" role="status" aria-live="polite">
@@ -1104,8 +1222,9 @@ function show() {
     app.innerHTML = `
         <p class="muted">
             ${escapeHtml(question.category)} · Ερώτηση ${position + 1}
-            από ${QUESTIONS_PER_TEST} · Αρχικός αριθμός #${question.id}
+            από ${knowledgeTestLength} · Αρχικός αριθμός #${question.id}
         </p>
+        ${examTimerHtml()}
         <div class="bar"><div class="fill" style="width: ${progress}%"></div></div>
         <h2>${escapeHtml(question.question)}</h2>
         ${optionsHtml}
@@ -1115,9 +1234,11 @@ function show() {
             <button id="knowledge-action" onclick="${action}" ${!knowledgeChecked && selected === null ? 'disabled' : ''}>${actionText}</button>
         </div>
     `;
+    refreshExamTimer();
 }
 
 function choose(index) {
+    if (examTimeExpired()) {expireTimedTest();return;}
     if (knowledgeChecked || !Number.isInteger(index) || index < 0 || index >= test[position].options.length) return;
     answers[position] = index;
     const button = document.getElementById('knowledge-action');
@@ -1126,6 +1247,7 @@ function choose(index) {
 }
 
 function checkKnowledgeAnswer() {
+    if (examTimeExpired()) {expireTimedTest();return;}
     if (knowledgeChecked || answers[position] === null) return;
     knowledgeChecked = true;
     queueAttemptSave();
@@ -1138,8 +1260,9 @@ function prev() {
 }
 
 function next() {
+    if (examTimeExpired()) {expireTimedTest();return;}
     if (!knowledgeChecked || resultSaving) return;
-    if (position < QUESTIONS_PER_TEST - 1) {
+    if (position < knowledgeTestLength - 1) {
         position++;
         knowledgeChecked = false;
         queueAttemptSave();
@@ -1149,16 +1272,18 @@ function next() {
     }
 }
 
-async function finish() {
-    if (!knowledgeChecked || resultSaving || knowledgeResultLogged) return;
+async function finish(expired = false) {
+    if ((!knowledgeChecked && !expired) || resultSaving || knowledgeResultLogged || knowledgeFinishing) return;
+    knowledgeFinishing=true;
+    try {
     const correctCount = test.reduce((total, question, index) => {
         return total + (answers[index] === question.correct ? 1 : 0);
     }, 0);
 
     const unansweredCount = answers.filter((answer) => answer === null).length;
-    const percentage = Math.round((correctCount / QUESTIONS_PER_TEST) * 100);
+    const percentage = Math.round((correctCount / knowledgeTestLength) * 100);
     if (!await flushProgress()) return;
-    if (!await saveTestResult('knowledge', correctCount, QUESTIONS_PER_TEST, buildKnowledgeBreakdown(test, answers))) return;
+    if (!await saveTestResult('knowledge', correctCount, knowledgeTestLength, buildKnowledgeBreakdown(test, answers))) return;
     knowledgeResultLogged = true;
 
     const reviewHtml = test.map((question, index) => {
@@ -1182,12 +1307,13 @@ async function finish() {
 
     app.innerHTML = `
         <h1>Αποτέλεσμα τεστ</h1>
-        <h2>${correctCount} / ${QUESTIONS_PER_TEST} σωστές · ${percentage}%</h2>
-        <p class="muted">Αναπάντητες: ${unansweredCount}</p>
+        <h2>${correctCount} / ${knowledgeTestLength} σωστές · ${percentage}%</h2>
+        <p class="muted">${expired ? 'Ο χρόνος ολοκληρώθηκε. ' : ''}Αναπάντητες: ${unansweredCount}</p>
         <div class="actions"><button onclick="home()">Αρχική οθόνη</button><button class="secondary" onclick="openInsights()">Αναλυτική πρόοδος</button></div>
         <h3>Ανασκόπηση απαντήσεων</h3>
         ${reviewHtml}
     `;
+    } finally {knowledgeFinishing=false;}
 }
 
 // -------------------- ΛΕΙΤΟΥΡΓΙΑ ΕΚΜΑΘΗΣΗΣ --------------------
@@ -1399,6 +1525,7 @@ function inductiveMenu(mode) {
         ${mode === "test" ? `<p class="muted">${premiumDemoEnabled() ? 'Premium: απεριόριστα τεστ.' : `Δωρεάν τεστ που απομένουν: ${freeTestsRemaining()} (κοινό όριο με τα τεστ γνώσεων).`}</p>` : ''}
         ${mode === "test" ? `
             <p class="muted">Το τεστ ξεκινά πάντα από το επίπεδο 3/10, περιλαμβάνει 18 ερωτήσεις χωρίς επανάληψη και η δυσκολία προσαρμόζεται ανάλογα με τις απαντήσεις.</p>
+            <div class="exam-options"><label class="exam-timer-choice" for="inductive-timed"><input type="checkbox" id="inductive-timed"><span><strong>Τεστ με χρονικό όριο</strong><small>25 λεπτά, αν ενεργοποιηθεί</small></span></label></div>
         ` : `
             <label for="inductive-study-level">Επιλογή επιπέδου εκμάθησης</label>
             <select id="inductive-study-level">
@@ -1423,6 +1550,7 @@ async function startInductive() {
             if (!await flushProgress()) return;
         } finally { attemptPending = false; }
     }
+    selectedInductiveTimed = inductiveMode === 'test' && document.getElementById('inductive-timed')?.checked === true;
     inductiveResultLogged = false;
     activeTestId = null;
     inductiveLevel = 3; // Οριστικό αρχικό επίπεδο για κάθε τεστ.
@@ -1439,15 +1567,19 @@ async function startInductive() {
         const initial=pickNextInductive();
         if (!initial) {alert('Δεν υπάρχουν διαθέσιμα σχήματα.');return;}
         inductiveCurrent=initial; inductiveSeen.add(initial.id); inductiveSelected=null; inductiveAnswered=false;
-        const payload={id:newTestId(),type:'inductive',questionIds:[initial.id],answers:[],position:0,level:inductiveLevel,correct:0,total:0,currentId:initial.id,selected:null,answered:false};
+        const payload={id:newTestId(),type:'inductive',questionIds:[initial.id],answers:[],position:0,level:inductiveLevel,correct:0,total:0,currentId:initial.id,selected:null,answered:false,timed:selectedInductiveTimed};
         try {
             const result=await window.StoxosFirebase.beginAttempt(payload, true);
             if (!result.allowed) {showPricing('Έχεις ολοκληρώσει και τα 5 δωρεάν τεστ.');return;}
             savedAttempt=payload;
             activeTestId=payload.id;
             progressError=false;
+            // Νέο τεστ σχημάτων: νέα προσπάθεια και νέα πλήρης διάρκεια.
+            // Η συνέχιση παλιού τεστ εξακολουθεί να διαβάζει το startedAt.
+            startFreshExamTimer(payload);
         } catch(err) {alert('Δεν ήταν δυνατή η έναρξη: '+(err.message||err));return;}
         showInductive();
+        refreshExamTimer();
     } else nextInductiveQuestion();
 }
 
@@ -1458,7 +1590,21 @@ function pickNextInductive() {
     const candidates=inductiveMode === 'study' ? remaining : remaining.filter(q=>Math.abs(q.level-inductiveLevel)===minDistance);
     return candidates[Math.floor(Math.random()*candidates.length)];
 }
+async function finishExpiredInductive() {
+    if (!inductiveActiveTest || resultSaving || inductiveResultLogged || !activeTestId) return;
+    if (!await flushProgress()) return;
+    const attempted = inductiveTotal;
+    if (!await saveTestResult('inductive', inductiveCorrect, INDUCTIVE_TEST_LENGTH)) return;
+    inductiveResultLogged = true;
+    inductiveActiveTest = false;
+    app.innerHTML = `<section class="exam-time-result">
+        <p class="home-kicker">ΟΛΟΚΛΗΡΩΣΗ ΧΡΟΝΟΥ</p><h1>Ο χρόνος έληξε</h1>
+        <h2>${inductiveCorrect} / ${INDUCTIVE_TEST_LENGTH} σωστές · ${Math.round(100*inductiveCorrect/INDUCTIVE_TEST_LENGTH)}%</h2>
+        <p class="muted">Απαντήθηκαν ${attempted} από τις ${INDUCTIVE_TEST_LENGTH} ερωτήσεις. Οι υπόλοιπες καταχωρίστηκαν ως αναπάντητες.</p>
+        <div class="actions"><button onclick="home()">Αρχική</button><button class="secondary" onclick="openInsights()">Αναλυτική πρόοδος</button></div></section>`;
+}
 async function nextInductiveQuestion() {
+    if (inductiveActiveTest && examTimeExpired()) {expireTimedTest();return;}
     if (inductiveActiveTest && !await flushProgress()) return;
     if (resultSaving) return;
     const remaining = inductiveBank().filter(q => !inductiveSeen.has(q.id) && (inductiveMode === "test" || inductiveStudyLevel === "all" || q.level === inductiveStudyLevel));
@@ -1559,6 +1705,7 @@ function showInductive() {
     app.innerHTML = `
         <p class="muted">Επαγωγικός Συλλογισμός · ${inductiveMode === "test" ? "Τεστ" : `Εκμάθηση · Επίπεδο ${q.level}/10`}</p>
         <p class="muted">Ερώτηση ${inductiveTotal + 1}${inductiveMode === "test" ? ` / ${INDUCTIVE_TEST_LENGTH}` : ""} · ${escapeHtml(q.id)}</p>
+        ${inductiveActiveTest ? examTimerHtml() : ''}
         <h2>Ποιο σχήμα λείπει;</h2>
         <div class="inductive-sequence ${q.type === "matrix" ? "inductive-matrix" : q.type === "count-matrix" ? "inductive-matrix-four" : q.type === "logic-matrix" ? "inductive-matrix" : ""}">${q.sequence.map(renderFrame).map(s => `<div class="inductive-frame">${s}</div>`).join("")}</div>
         <h3>Απαντήσεις</h3>
@@ -1573,6 +1720,7 @@ function showInductive() {
 }
 
 function chooseInductive(index) {
+    if (inductiveActiveTest && examTimeExpired()) {expireTimedTest();return;}
     if (inductiveAnswered) return;
     inductiveSelected = index;
     document.querySelectorAll(".inductive-option").forEach((button,i) => {
@@ -1585,6 +1733,7 @@ function chooseInductive(index) {
 }
 
 function checkInductive() {
+    if (inductiveActiveTest && examTimeExpired()) {expireTimedTest();return;}
     if (inductiveAnswered || inductiveSelected === null) return;
     inductiveAnswered = true;
     inductiveTotal++;

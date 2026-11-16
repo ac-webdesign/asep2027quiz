@@ -8,7 +8,7 @@ import {
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-functions.js';
 import {
   getFirestore, doc, collection, serverTimestamp, runTransaction,
-  onSnapshot, query, orderBy, limit, updateDoc, getDoc, deleteDoc, setDoc
+  onSnapshot, query, orderBy, limit, updateDoc, getDoc, getDocFromServer, deleteDoc, setDoc
 } from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -113,7 +113,9 @@ window.StoxosFirebase = {
   getAttempt: async () => {
     const user=auth.currentUser;
     if (!user) throw Error('Δεν είσαι συνδεδεμένος.');
-    const snap=await getDoc(doc(db,'users',user.uid,'active','current'));
+    // Το χρονόμετρο χρειάζεται την πραγματική ώρα έναρξης του server.
+    // Η cache μπορεί να περιέχει την προηγούμενη προσπάθεια αμέσως μετά τη συναλλαγή.
+    const snap=await getDocFromServer(doc(db,'users',user.uid,'active','current'));
     return snap.exists()?snap.data():null;
   },
   beginAttempt: async (attempt, replaceExisting = false) => {
@@ -129,7 +131,7 @@ window.StoxosFirebase = {
       const premium=entitlement.exists() && entitlement.data().premium===true;
       if (!premium && profile.data().started>=limitFreeTests) return {allowed:false};
       // Atomically replace the unfinished attempt; no extra completion charge.
-      tx.set(activeRef,{...attempt,updatedAt:serverTimestamp()});
+      tx.set(activeRef,{...attempt,startedAt:serverTimestamp(),updatedAt:serverTimestamp()});
       return {allowed:true,existing:false,attempt};
     });
   },
@@ -163,11 +165,11 @@ window.StoxosFirebase = {
   },
   // Ατομική συναλλαγή: αποτέλεσμα + μετρητής ολοκλήρωσης μαζί.
   // Σημαντικό: οι βαθμολογίες παράγονται στον client, όχι σε έμπιστο server.
-  saveResult: async (type, correct, total, submissionId, breakdown = null) => {
+  saveResult: async (type, correct, total, submissionId, breakdown = null, timing = null) => {
     const user = auth.currentUser;
     if (!user) throw Error('Δεν είσαι συνδεδεμένος.');
     if (!['knowledge', 'inductive'].includes(type) || !Number.isInteger(correct) ||
-        !Number.isInteger(total) || (type === 'knowledge' && total !== 25) ||
+        !Number.isInteger(total) || (type === 'knowledge' && ![10,25,50].includes(total)) ||
         (type === 'inductive' && total !== 18) || correct < 0 || correct > total) {
       throw Error('Μη έγκυρο αποτέλεσμα.');
     }
@@ -175,12 +177,18 @@ window.StoxosFirebase = {
     const categoryCorrect = type === 'knowledge' ? breakdown?.categoryCorrect : Array(11).fill(0);
     const categoryTotal = type === 'knowledge' ? breakdown?.categoryTotal : Array(11).fill(0);
     const valid = arr => Array.isArray(arr) && arr.length === 11 &&
-      arr.every(v => Number.isInteger(v) && v >= 0 && v <= 25);
+      arr.every(v => Number.isInteger(v) && v >= 0 && v <= 50);
     if (!valid(categoryCorrect) || !valid(categoryTotal) ||
         categoryCorrect.some((v,i) => v > categoryTotal[i]) ||
         categoryCorrect.reduce((sum,n)=>sum+n,0) !== (type === 'knowledge' ? correct : 0) ||
         categoryTotal.reduce((sum,n)=>sum+n,0) !== (type === 'knowledge' ? total : 0)) {
       throw Error('Η ανάλυση κατηγοριών δεν συμφωνεί με το αποτέλεσμα.');
+    }
+    const timed = timing?.timed === true;
+    const elapsedSeconds = timed ? timing?.elapsedSeconds : 0;
+    const maxSeconds = type === 'inductive' ? 25*60 : total*60;
+    if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > maxSeconds) {
+      throw Error('Μη έγκυρη διάρκεια τεστ.');
     }
     // Οι listeners εκμάθησης ενεργοποιούνται μόνο στο startVerifiedSession.
     // Η αποθήκευση αποτελέσματος δεν πρέπει να δημιουργεί νέες συνδρομές Firestore.
@@ -223,7 +231,7 @@ window.StoxosFirebase = {
         createdAt: previous?.createdAt || serverTimestamp(),
         updatedAt: serverTimestamp()
       };
-      tx.set(resultRef, {type, correct, total, categoryCorrect, categoryTotal, at: serverTimestamp()});
+      tx.set(resultRef, {type, correct, total, categoryCorrect, categoryTotal, timed, elapsedSeconds, at: serverTimestamp()});
       tx.set(analyticsRef, nextAnalytics);
       if (!premium) tx.update(profileRef, {started: completed + 1});
       tx.delete(activeRef);
@@ -265,6 +273,7 @@ async function startVerifiedSession(user, version) {
     offResults = onSnapshot(resultsQuery,
       snap => window.firebaseResultsChanged?.(snap.docs.map(d => ({
         type: d.data().type, correct: d.data().correct, total: d.data().total,
+        timed: typeof d.data().timed === 'boolean' ? d.data().timed : null, elapsedSeconds: d.data().elapsedSeconds ?? null,
         categoryCorrect: d.data().categoryCorrect || null,
         categoryTotal: d.data().categoryTotal || null,
         at: d.data().at?.toDate?.()?.toISOString() || new Date().toISOString()

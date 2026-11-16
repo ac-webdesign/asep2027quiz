@@ -493,3 +493,22 @@ select { display:block; appearance:auto; width:100%; min-height:49px; padding:11
 .public-deletion p { overflow-wrap:anywhere; }
 .legal-success { color:var(--positive)!important; }
 @media(max-width:650px) { .site-legal-footer { margin:-53px auto 92px; padding:0 15px; } .legal-footer { padding:0 18px; } .legal-card { border-radius:16px; } .public-deletion { padding:14px; } }
+
+/* Εξατομίκευση τεστ γνώσεων και χρονόμετρο (v1.1). */
+.exam-options { display:grid; gap:8px; margin:18px 0 14px; padding:17px 18px; border:1px solid var(--line); border-radius:14px; background:var(--surface-soft); }
+.exam-options > label:not(.exam-timer-choice) { margin:0 0 0; font-size:.83rem; }
+.exam-options > select { margin:3px 0 6px; background:white; }
+.exam-timer-choice { display:flex!important; align-items:center; gap:12px; margin:3px 0!important; cursor:pointer; font-weight:500!important; }
+.exam-timer-choice input { flex:none; width:20px; height:20px; margin:0; accent-color:var(--teal); }
+.exam-timer-choice span { display:grid; gap:2px; }
+.exam-timer-choice strong { font-size:.86rem; color:var(--navy); }
+.exam-timer-choice small { font-size:.76rem; color:var(--muted); font-weight:500; }
+.exam-timer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 15px; margin:13px 0; border:1px solid #c5e1dd; background:#eef8f6; border-radius:12px; }
+.exam-timer span { color:var(--teal-dark); font-weight:750; font-size:.79rem; }
+.exam-timer strong { font-variant-numeric:tabular-nums; font-size:1.22rem; letter-spacing:.035em; color:var(--navy); }
+.exam-timer.is-urgent { background:#fff3f1; border-color:#e9b2ae; }
+.exam-timer.is-urgent span,.exam-timer.is-urgent strong { color:#ad3d43; }
+.exam-expired-error { padding:13px; background:#fff4ef; border:1px solid #efc9b8; border-radius:10px; color:#8c4436; }
+.exam-expired-error button { min-height:34px; padding:5px 12px; font-size:.77rem; }
+.exam-time-result { max-width:650px; }
+@media(max-width:650px) { .exam-options { padding:13px; } .exam-timer { margin:11px 0; padding:8px 12px; } }

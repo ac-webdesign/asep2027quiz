@@ -224,6 +224,16 @@ select { display:block; appearance:auto; width:100%; min-height:49px; padding:11
 .insight-inductive-metrics strong { color:var(--navy); font-size:1rem; line-height:1; }
 .insight-history-heading { margin-top:29px; }
 .insight-history-filters { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 13px; }
+/* Πλοήγηση ιστορικού: 10 αποτελέσματα ανά σελίδα. */
+.insight-pagination { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:18px 0 6px; }
+.insight-pagination button { min-height:40px; padding:9px 13px; font-size:.77rem; }
+.insight-page-count { color:var(--ink-soft); font-size:.76rem; font-weight:800; font-variant-numeric:tabular-nums; }
+@media(max-width:450px) {
+  .insight-pagination { gap:7px; }
+  .insight-pagination button { flex:1 1 0; min-width:0; padding:8px 9px; font-size:.72rem; }
+  .insight-page-count { order:-1; text-align:center; flex-basis:100%; }
+}
+
 .insight-filter { padding:8px 14px; min-height:37px; border-radius:999px; background:#f3f7f8; color:var(--ink-soft); border:1px solid var(--line); box-shadow:none; font-size:.75rem; }
 .insight-filter:hover:not(:disabled) { background:#e9f1f2; box-shadow:none; }
 .insight-filter.is-selected { color:#fff; background:var(--navy); border-color:var(--navy); }
@@ -512,3 +522,79 @@ select { display:block; appearance:auto; width:100%; min-height:49px; padding:11
 .exam-expired-error button { min-height:34px; padding:5px 12px; font-size:.77rem; }
 .exam-time-result { max-width:650px; }
 @media(max-width:650px) { .exam-options { padding:13px; } .exam-timer { margin:11px 0; padding:8px 12px; } }
+
+
+/* Φάση 2 — αναγνωσιμότητα SVG σε κινητά, χωρίς αλλαγές στις γεωμετρικές αναλογίες. */
+.inductive-answer-tools { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:9px; margin:10px 0 3px; }
+.inductive-answer-tools h3 { margin:0; }
+.inductive-view-toggle { min-height:36px; padding:7px 11px; font-size:.74rem; box-shadow:none; }
+.inductive-zero-note { color:var(--ink-soft); font-size:.78rem; margin:0 0 12px; }
+.inductive-options.inductive-options-large { grid-template-columns:repeat(3,minmax(0,1fr)); max-width:750px; gap:10px; }
+@media(max-width:650px) {
+  .inductive-options.inductive-options-large { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .inductive-options.inductive-options-large .inductive-option { padding:9px; }
+  .inductive-options.inductive-options-large .inductive-option strong { font-size:.83rem; }
+}
+
+
+/* Checkpoint A — ανεξάρτητη προσομοίωση σχημάτων με ανασκόπηση στο τέλος */
+.inductive-neutral { background:var(--surface-soft); border-left:3px solid var(--teal); color:var(--ink-soft); }
+.inductive-exam-result { max-width:750px; margin:0 auto; }
+.inductive-exam-score { display:flex; align-items:center; flex-wrap:wrap; gap:14px; padding:17px 19px; margin:19px 0 13px; border:1px solid #cfe5e0; border-radius:16px; background:var(--teal-light); }
+.inductive-exam-score strong { color:var(--teal-dark); font-size:clamp(1.75rem,4vw,2.35rem); line-height:1.1; }
+.inductive-exam-score span { color:var(--ink); font-size:.92rem; font-weight:700; }
+.inductive-exam-review { margin-top:31px; }
+.inductive-exam-review > h2 { margin-bottom:6px; }
+.inductive-review-card { margin:10px 0; border:1px solid var(--line); border-radius:13px; overflow:hidden; background:#fff; }
+.inductive-review-card > summary { display:flex; align-items:center; gap:10px; padding:15px; cursor:pointer; color:var(--ink); font-weight:800; list-style:none; }
+.inductive-review-card > summary::-webkit-details-marker { display:none; }
+.inductive-review-card > summary::after { content:'⌄'; margin-left:2px; color:var(--muted); font-size:1.2rem; }
+.inductive-review-card[open] > summary::after { transform:rotate(180deg); }
+.inductive-review-index { color:var(--muted); min-width:22px; }
+.inductive-review-card > summary > span:nth-child(2) { flex:1; min-width:0; }
+.inductive-review-card summary small { display:block; color:var(--muted); font-weight:500; font-size:.72rem; }
+.inductive-review-status { padding:5px 9px; border-radius:99px; font-size:.70rem; white-space:nowrap; font-weight:800; }
+.inductive-review-status.is-correct { background:#e4f5e9; color:#18734f; }
+.inductive-review-status.is-incorrect { background:#fff0f1; color:#a13d49; }
+.inductive-review-status.is-unanswered { background:#f1f4f6; color:var(--ink-soft); }
+.inductive-review-content { padding:13px 15px 18px; border-top:1px solid var(--line); }
+.inductive-review-content > p { margin:13px 0 0; font-size:.84rem; line-height:1.65; }
+.inductive-review-content .inductive-sequence { margin:4px auto 19px; }
+.inductive-review-scroll { max-width:100%; overflow-x:auto; }
+.inductive-review-scroll .inductive-sequence:not(.inductive-matrix):not(.inductive-matrix-four) { min-width:310px; }
+.inductive-review-answers { display:flex; align-items:center; flex-wrap:wrap; gap:14px; color:var(--ink-soft); font-size:.81rem; }
+.inductive-review-answers strong { color:var(--navy); }
+.inductive-review-correct-shape { width:90px; max-width:100%; margin-left:auto; }
+.inductive-review-correct-shape svg { width:100%; height:auto; display:block; }
+@media (max-width:650px) {
+  .inductive-review-card > summary { padding:12px 10px; gap:7px; font-size:.77rem; }
+  .inductive-review-status { font-size:.64rem; padding:4px 6px; }
+  .inductive-review-content { padding:12px 10px; }
+  .inductive-review-correct-shape { width:72px; }
+}
+
+
+/* Επαγωγικός συλλογισμός — συμπαγείς απαντήσεις ως προεπιλογή στο κινητό.
+   Τρεις επιλογές στην πρώτη γραμμή, δύο κεντραρισμένες στη δεύτερη.
+   Δεν επηρεάζονται οι αρχικές σειρές SVG ούτε η προαιρετική μεγέθυνση. */
+@media (max-width: 650px) {
+  .inductive-options:not(.inductive-options-large) {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+    max-width: 390px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .inductive-options:not(.inductive-options-large) > .inductive-option {
+    grid-column: span 2;
+    min-width: 0;
+    padding: 6px 5px;
+    gap: 4px;
+  }
+  .inductive-options:not(.inductive-options-large) > .inductive-option:nth-child(4) {
+    grid-column: 2 / span 2;
+  }
+  .inductive-options:not(.inductive-options-large) .inductive-option strong {
+    font-size: .78rem;
+  }
+}

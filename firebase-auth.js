@@ -170,7 +170,7 @@ window.StoxosFirebase = {
     if (!user) throw Error('Δεν είσαι συνδεδεμένος.');
     if (!['knowledge', 'inductive'].includes(type) || !Number.isInteger(correct) ||
         !Number.isInteger(total) || (type === 'knowledge' && ![10,25,50].includes(total)) ||
-        (type === 'inductive' && total !== 18) || correct < 0 || correct > total) {
+        (type === 'inductive' && ![7,18,25].includes(total)) || correct < 0 || correct > total) {
       throw Error('Μη έγκυρο αποτέλεσμα.');
     }
     if (!/^[a-f0-9-]{36}$/.test(submissionId || '')) throw Error('Μη έγκυρη προσπάθεια.');
@@ -186,7 +186,7 @@ window.StoxosFirebase = {
     }
     const timed = timing?.timed === true;
     const elapsedSeconds = timed ? timing?.elapsedSeconds : 0;
-    const maxSeconds = type === 'inductive' ? 25*60 : total*60;
+    const maxSeconds = type === 'inductive' ? ({7:10,18:25,25:35}[total] * 60) : total*60;
     if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > maxSeconds) {
       throw Error('Μη έγκυρη διάρκεια τεστ.');
     }

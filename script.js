@@ -58,6 +58,7 @@ function studyPayload(kind) {
     }
     return {category:String(inductiveStudyLevel), questionId:inductiveCurrent?.id||'',
         position:0, level:inductiveLevel, seenIds:[...inductiveSeen],
+        wrongIds:[...inductiveWrongIds], reviewMode:inductiveStudyReviewActive,
         correct:inductiveCorrect, total:inductiveTotal, selected:inductiveSelected, answered:inductiveAnswered};
 }
 function saveStudyProgress(kind) {
@@ -113,6 +114,8 @@ async function resumeStudy(kind) {
             inductiveMode='study';inductiveActiveTest=false;
             inductiveStudyLevel=record.category==='all'?'all':Number(record.category);
             inductiveSeen=new Set(record.seenIds);
+            inductiveWrongIds=new Set(Array.isArray(record.wrongIds) ? record.wrongIds : []);
+            inductiveStudyReviewActive=record.reviewMode === true;
             inductiveCurrent=found;inductiveSeen.add(found.id);
             inductiveLevel=record.level;inductiveCorrect=record.correct;inductiveTotal=record.total;
             inductiveSelected=record.selected;inductiveAnswered=record.answered;
@@ -163,6 +166,9 @@ let cloudHistoryLoaded = false;
 let cloudAnalytics = null;
 let cloudAnalyticsLoaded = false;
 let insightHistoryFilter = "all";
+// Σελίδες 10 αποτελεσμάτων από τα έως 50 πρόσφατα αποθηκευμένα τεστ.
+const INSIGHT_HISTORY_PAGE_SIZE = 10;
+let insightHistoryPage = 0;
 let attemptPending = false;
 let isPremium = false;
 let inductiveActiveTest = false;
@@ -197,7 +203,11 @@ function setupExamTimer(record) {
     if (!record?.timed) return;
     const startedAt = timestampMillis(record.startedAt);
     if (!Number.isFinite(startedAt)) throw Error('Δεν βρέθηκε η ώρα έναρξης του τεστ. Δοκίμασε «Συνέχεια τεστ».');
-    const seconds = record.type === 'inductive' ? 25 * 60 : record.questionIds.length * 60;
+    const inductiveSize = record.type === 'inductive' && INDUCTIVE_TEST_SIZES.includes(record.answers?.length)
+        && record.answers.length === record.questionIds?.length
+        ? record.answers.length : INDUCTIVE_TEST_LENGTH;
+    const seconds = record.type === 'inductive'
+        ? inductiveTimeMinutes(inductiveSize) * 60 : record.questionIds.length * 60;
     activeExamTimer = {id:record.id, kind:record.type, startedAt, durationSeconds:seconds};
     examTimerInterval = setInterval(refreshExamTimer, 1000);
 }
@@ -261,8 +271,13 @@ function queueAttemptSave() {
     if (!activeTestId || !authIdentity()) return Promise.resolve();
     const id = activeTestId;
     const uid = currentUser.uid;
+    const balancedExam = inductiveMode === 'test' && inductiveActiveTest && inductiveExamStyle === 'balanced';
     const state = inductiveMode === 'test' && inductiveActiveTest ? {
-        id, type:'inductive', questionIds: [...inductiveSeen], answers:[], position:0,
+        id, type:'inductive',
+        questionIds: balancedExam ? inductiveExamQuestions.map(q => q.id) : [...inductiveSeen],
+        answers: balancedExam ? [...inductiveExamAnswers] : [],
+        position: balancedExam ? Math.min(inductiveTestLength - 1,
+            inductiveAnswered ? Math.max(0, inductiveTotal - 1) : inductiveTotal) : 0,
         level:inductiveLevel, correct:inductiveCorrect, total:inductiveTotal, timed:selectedInductiveTimed,
         currentId:inductiveCurrent?.id || '', selected:inductiveSelected,
         answered:inductiveAnswered
@@ -287,7 +302,12 @@ async function flushProgress() {
 function resumeBanner() {
     if (!authIdentity() || !savedAttempt) return '';
     const name = savedAttempt.type === 'knowledge' ? 'Τεστ γνώσεων' : 'Τεστ σχημάτων';
-    const n = savedAttempt.type === 'knowledge' ? Math.min(savedAttempt.questionIds?.length || 25,(savedAttempt.position||0)+1) : Math.min(18,(savedAttempt.total||0)+1);
+    const n = savedAttempt.type === 'knowledge'
+        ? Math.min(savedAttempt.questionIds?.length || 25, (savedAttempt.position || 0) + 1)
+        : INDUCTIVE_TEST_SIZES.includes(savedAttempt.answers?.length)
+            && savedAttempt.questionIds?.length === savedAttempt.answers.length
+            ? Math.min(savedAttempt.answers.length, (savedAttempt.position || 0) + 1)
+            : Math.min(INDUCTIVE_TEST_LENGTH, (savedAttempt.total || 0) + 1);
     return `<section class="access-strip access-strip-compact" aria-label="Ημιτελές τεστ">
         <div class="access-compact-info"><span class="access-label">ΣΥΝΕΧΕΙΑ ΤΕΣΤ</span>
         <strong>${name}</strong><span class="access-compact-meta">Ερώτηση ${n}</span></div>
@@ -319,16 +339,32 @@ async function resumeSavedTest() {
             show();
             refreshExamTimer();
         } else {
-            const byId=new Map(INDUCTIVE_QUESTIONS.map(q=>[q.id,q]));
-            inductiveMode='test'; inductiveActiveTest=true; inductiveResultLogged=false;
-            inductiveSeen=new Set(state.questionIds);
-            inductiveLevel=state.level; inductiveCorrect=state.correct; inductiveTotal=state.total;
-            inductiveCurrent=byId.get(state.currentId);
-            inductiveSelected=state.selected; inductiveAnswered=!!state.answered;
+            const byId = new Map(inductiveBank().map(q => [q.id, q]));
+            inductiveMode = 'test'; inductiveActiveTest = true; inductiveResultLogged = false;
+            inductiveExamStyle = INDUCTIVE_TEST_SIZES.includes(state.questionIds?.length)
+                && state.answers?.length === state.questionIds.length ? 'balanced' : 'legacy';
+            inductiveTestLength = inductiveExamStyle === 'balanced'
+                ? state.questionIds.length : INDUCTIVE_TEST_LENGTH;
+            inductiveExamQuestions = inductiveExamStyle === 'balanced'
+                ? state.questionIds.map(id => byId.get(id)) : [];
+            if (inductiveExamStyle === 'balanced' &&
+                (inductiveExamQuestions.some(q => !q) ||
+                 new Set(state.questionIds).size !== inductiveTestLength)) {
+                throw Error('Το αποθηκευμένο τεστ περιέχει μη έγκυρες ασκήσεις.');
+            }
+            inductiveExamAnswers = inductiveExamStyle === 'balanced' ? state.answers.slice() : [];
+            inductiveSeen = new Set(state.questionIds);
+            inductiveLevel = state.level; inductiveCorrect = state.correct; inductiveTotal = state.total;
+            inductiveCurrent = byId.get(state.currentId);
+            inductiveSelected = state.selected; inductiveAnswered = !!state.answered;
             if (!inductiveCurrent) throw Error('Δεν βρέθηκε το αποθηκευμένο σχήμα.');
+            if (inductiveExamStyle === 'balanced' &&
+                inductiveExamQuestions[state.position]?.id !== inductiveCurrent.id) {
+                throw Error('Η αποθηκευμένη θέση του τεστ δεν συμφωνεί με τις ασκήσεις.');
+            }
             showInductive();
             if (inductiveAnswered) showInductiveFeedback();
-            else if (inductiveSelected!==null && !examTimeExpired()) chooseInductive(inductiveSelected);
+            else if (inductiveSelected !== null && !examTimeExpired()) chooseInductive(inductiveSelected);
             refreshExamTimer();
         }
     } catch(err) { console.error(err); alert('Αποτυχία ανάκτησης του τεστ: '+(err.message||err)); home(); }
@@ -374,6 +410,8 @@ function firebaseAuthChanged(user) {
         startedTests = 0;
         cloudHistory = [];
         cloudHistoryLoaded = false;
+        insightHistoryFilter = 'all';
+        insightHistoryPage = 0;
         cloudAnalytics = null;
         cloudAnalyticsLoaded = false;
         isPremium = false;
@@ -679,7 +717,7 @@ function insightDate(value) {
     return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('el-GR', {day:'numeric', month:'short', year:'numeric'});
 }
 function insightCategories(record) {
-    if (record.type === 'inductive') return {title:'Επαγωγικός συλλογισμός', detail:'Τεστ σχημάτων · Προσαρμοζόμενη δυσκολία', legacy:false};
+    if (record.type === 'inductive') return {title:'Επαγωγικός συλλογισμός', detail:`Τεστ σχημάτων · ${record.total} ερωτήσεις`, legacy:false};
     const counts = record.categoryTotal;
     if (!Array.isArray(counts) || counts.length !== KNOWLEDGE_CATEGORY_ORDER.length || !counts.some(n => n > 0)) {
         return {title:'Τεστ γνώσεων', detail:'Δεν έχει καταγραφεί ανάλυση ενοτήτων', legacy:true};
@@ -693,7 +731,7 @@ function insightHistoryCard(record) {
     const context=insightCategories(record);
     const kind = record.type === 'inductive' ? 'ΣΧΗΜΑΤΑ' : 'ΓΝΩΣΕΙΣ';
     const quality = score === null ? '' : score >= 70 ? 'is-good' : score < 40 ? 'is-low' : '';
-    const durationText = record.timed === true ? `Με χρόνο (${record.type === 'inductive' ? 25 : record.total}′)` : record.timed === false ? 'Χωρίς χρόνο' : '';
+    const durationText = record.timed === true ? `Με χρόνο (${record.type === 'inductive' ? inductiveTimeMinutes(record.total) : record.total}′)` : record.timed === false ? 'Χωρίς χρόνο' : '';
     return `<article class="insight-result-card" aria-label="${escapeHtml(context.title)}, ${score ?? 'χωρίς'} τοις εκατό">
         <div class="insight-result-main">
             <div class="insight-result-content">
@@ -710,10 +748,24 @@ function insightHistoryCard(record) {
 function setInsightHistoryFilter(kind) {
     if (!['all','knowledge','inductive'].includes(kind)) return;
     insightHistoryFilter = kind;
+    insightHistoryPage = 0;
     showInsights();
+}
+function setInsightHistoryPage(nextPage) {
+    if (!Number.isInteger(nextPage) || nextPage < 0) return;
+    const records = accessData().history;
+    const count = insightHistoryFilter === 'all' ? records.length : records.filter(r => r.type === insightHistoryFilter).length;
+    const pageCount = Math.max(1, Math.ceil(count / INSIGHT_HISTORY_PAGE_SIZE));
+    if (nextPage >= pageCount || nextPage === insightHistoryPage) return;
+    insightHistoryPage = nextPage;
+    showInsights();
+    // Μετά την αλλαγή σελίδας, διατηρούμε την εστίαση στο ιστορικό,
+    // χωρίς να επιστρέφουμε στην κορυφή με όλα τα συγκεντρωτικά στατιστικά.
+    document.getElementById('insight-history')?.scrollIntoView({block:'start', behavior:'auto'});
 }
 function openInsights() {
     insightHistoryFilter = 'all';
+    insightHistoryPage = 0;
     showInsights();
 }
 function showInsights() {
@@ -728,6 +780,16 @@ function showInsights() {
     const overall = insightScore(full.correct,full.total);
     const historical = [...accessData().history];
     const filtered = insightHistoryFilter === 'all' ? historical : historical.filter(r=>r.type === insightHistoryFilter);
+    const historyPages = Math.max(1, Math.ceil(filtered.length / INSIGHT_HISTORY_PAGE_SIZE));
+    insightHistoryPage = Math.min(insightHistoryPage, historyPages - 1);
+    const pageStart = insightHistoryPage * INSIGHT_HISTORY_PAGE_SIZE;
+    const visibleHistory = filtered.slice(pageStart, pageStart + INSIGHT_HISTORY_PAGE_SIZE);
+    const historyPagination = filtered.length > INSIGHT_HISTORY_PAGE_SIZE ? `
+        <nav class="insight-pagination" aria-label="Σελίδες ιστορικού τεστ">
+            <button type="button" class="secondary" onclick="setInsightHistoryPage(${insightHistoryPage - 1})" ${insightHistoryPage === 0 ? 'disabled' : ''}>← Προηγούμενη</button>
+            <span class="insight-page-count" aria-live="polite">Σελίδα ${insightHistoryPage + 1} από ${historyPages}</span>
+            <button type="button" class="secondary" onclick="setInsightHistoryPage(${insightHistoryPage + 1})" ${insightHistoryPage + 1 >= historyPages ? 'disabled' : ''}>Επόμενη →</button>
+        </nav>` : '';
     const catCorrect = Array.isArray(stats?.categoryCorrect) ? stats.categoryCorrect : Array(11).fill(0);
     const catTotal = Array.isArray(stats?.categoryTotal) ? stats.categoryTotal : Array(11).fill(0);
     const knownCategoryTotal = catTotal.reduce((a,b)=>a+b,0);
@@ -761,9 +823,9 @@ function showInsights() {
             <div><span class="insight-result-type">ΞΕΧΩΡΙΣΤΗ ΑΝΑΛΥΣΗ</span><h2>Επαγωγικός συλλογισμός</h2><p>Αποτελέσματα από τα τεστ σχημάτων</p></div>
             <div class="insight-inductive-metrics"><span><strong>${insightNumber(stats?.inductiveTests || 0)}</strong> τεστ</span><span><strong>${insightNumber(stats?.inductiveCorrect || 0)}/${insightNumber(stats?.inductiveTotal || 0)}</strong> σωστές</span><span><strong>${inductiveRate === null ? '—' : inductiveRate + '%'}</strong> επίδοση</span></div>
         </section>
-        <div class="insight-section-heading insight-history-heading"><div><h2>Ιστορικό τεστ</h2><p>Έως 50 πρόσφατα αποτελέσματα</p></div><span class="insight-section-counter">${cloudHistoryLoaded ? historical.length : '…'} τεστ</span></div>
+        <div id="insight-history" class="insight-section-heading insight-history-heading"><div><h2>Ιστορικό τεστ</h2><p>10 ανά σελίδα · διατηρούνται τα 50 πιο πρόσφατα αποτελέσματα</p></div><span class="insight-section-counter">${cloudHistoryLoaded ? historical.length : '…'} τεστ</span></div>
         <div class="insight-history-filters" aria-label="Φίλτρο ιστορικού">${filterButton('all','Όλα')}${filterButton('knowledge','Γνώσεις')}${filterButton('inductive','Σχήματα')}</div>
-        ${filtered.length ? `<div class="insight-list">${filtered.map(insightHistoryCard).join('')}</div>` : `<p class="muted">${cloudHistoryLoaded ? 'Δεν υπάρχουν αποτελέσματα για αυτό το φίλτρο.' : 'Φόρτωση ιστορικού...'}</p>`}
+        ${filtered.length ? `<div class="insight-list">${visibleHistory.map(insightHistoryCard).join('')}</div>${historyPagination}` : `<p class="muted">${cloudHistoryLoaded ? 'Δεν υπάρχουν αποτελέσματα για αυτό το φίλτρο.' : 'Φόρτωση ιστορικού...'}</p>`}
         ${legacy ? `<p class="insight-scope-note">Σε ${insightNumber(legacy)} παλαιότερα τεστ γνώσεων δεν είχε αποθηκευτεί η κατηγορία, γι’ αυτό εμφανίζονται χωρίς αναλυτική κατανομή.</p>` : ''}
         <div class="actions insight-actions"><button class="secondary" onclick="showAccount()">← Λογαριασμός</button><button onclick="showActivityMenu('test')">Νέο τεστ</button></div>
     </section>`;
@@ -1425,7 +1487,16 @@ showAuthLanding();
 // Το υπάρχον BANK και οι λειτουργίες γνώσεων παραμένουν ανεξάρτητα.
 // Η προσαρμογή δυσκολίας ενεργοποιείται σταδιακά καθώς προστίθενται ερωτήσεις.
 const INDUCTIVE_LETTERS = ["Α", "Β", "Γ", "Δ", "Ε"];
+// Το 18 παραμένει η προεπιλογή και το μέγεθος των παλιών προσαρμοστικών τεστ.
 const INDUCTIVE_TEST_LENGTH = 18;
+const INDUCTIVE_TEST_SIZES = [7, 18, 25];
+const INDUCTIVE_TEST_MINUTES = {7: 10, 18: 25, 25: 35};
+const INDUCTIVE_TIER_COUNTS = {7: [2, 3, 2], 18: [4, 10, 4], 25: [6, 13, 6]};
+let inductiveTestLength = INDUCTIVE_TEST_LENGTH;
+function inductiveTimeMinutes(length) {
+    return INDUCTIVE_TEST_MINUTES[length] || INDUCTIVE_TEST_MINUTES[INDUCTIVE_TEST_LENGTH];
+}
+
 let inductiveMode = "test";
 let inductiveCurrent = null;
 let inductiveSelected = null;
@@ -1435,6 +1506,14 @@ let inductiveSeen = new Set();
 let inductiveCorrect = 0;
 let inductiveTotal = 0;
 let inductiveResultLogged = false;
+// Τα νέα τεστ έχουν προεπιλεγμένο σύνολο 18 ασκήσεων. Οι παλιές
+// ημιτελείς προσαρμοστικές προσπάθειες μπορούν να συνεχιστούν ως είχαν.
+let inductiveExamStyle = 'balanced';
+let inductiveExamQuestions = [];
+let inductiveExamAnswers = [];
+// Οι λανθασμένες ασκήσεις της εκμάθησης διατηρούνται και στη συνέχιση.
+let inductiveWrongIds = new Set();
+let inductiveStudyReviewActive = false;
 
 // Έλεγχος της δομής και των απαντήσεων πριν εμφανιστεί ερώτηση.
 // Στις ακολουθίες με βέλος/κουκκίδα επαληθεύεται και η λογική της λύσης.
@@ -1477,9 +1556,22 @@ function validInductiveQuestion(q) {
             !Array.isArray(q.options) || q.options.length !== 5 ||
             !Number.isInteger(q.correct) || q.correct < 0 || q.correct > 4 ||
             !q.rules || !Array.isArray(q.rules.rows) || q.rules.rows.length !== 3) return false;
+        // 3 ανεξάρτητοι τύποι πινάκων πλήθους: κυκλική μετατόπιση,
+        // πρόσθεση/αφαίρεση και πολλαπλασιασμός/αφαίρεση.
+        const mode = q.rules.mode || 'permutation';
+        if (!['permutation','sum-difference','product-difference'].includes(mode)) return false;
         const rowValid = row => Array.isArray(row) && row.length === 4 &&
-            row.every(v => Number.isInteger(v) && v >= 1 && v <= 4) && new Set(row).size === 4;
+            row.every(v => Number.isInteger(v) && v >= 0 && v <= 4);
         if (!q.rules.rows.every(rowValid)) return false;
+        if (mode === 'permutation') {
+            if (!q.rules.rows.every(row => row.every(n => n >= 1) && new Set(row).size === 4)) return false;
+        } else {
+            const calculated = row => mode === 'sum-difference'
+                ? row[0] + row[1] - row[2]
+                : row[0] * row[1] - row[2];
+            if (!q.rules.rows.every(row => calculated(row) === row[3])) return false;
+            // Τα δύο ορατά παραδείγματα επιτρέπουν την επαλήθευση του κανόνα.
+        }
         const expected = q.rules.rows.flat();
         return q.sequence.every((v,i) => i === 11 || v && v.count === expected[i]) &&
             q.options.every(o => o && Number.isInteger(o.count) && o.count>=0 && o.count<=4) &&
@@ -1524,8 +1616,17 @@ function inductiveMenu(mode) {
         <p class="muted">${available.length} ελεγμένες ερωτήσεις SVG, χωρίς εξωτερικά αρχεία εικόνων.</p>
         ${mode === "test" ? `<p class="muted">${premiumDemoEnabled() ? 'Premium: απεριόριστα τεστ.' : `Δωρεάν τεστ που απομένουν: ${freeTestsRemaining()} (κοινό όριο με τα τεστ γνώσεων).`}</p>` : ''}
         ${mode === "test" ? `
-            <p class="muted">Το τεστ ξεκινά πάντα από το επίπεδο 3/10, περιλαμβάνει 18 ερωτήσεις χωρίς επανάληψη και η δυσκολία προσαρμόζεται ανάλογα με τις απαντήσεις.</p>
-            <div class="exam-options"><label class="exam-timer-choice" for="inductive-timed"><input type="checkbox" id="inductive-timed"><span><strong>Τεστ με χρονικό όριο</strong><small>25 λεπτά, αν ενεργοποιηθεί</small></span></label></div>
+            <div class="exam-options">
+                <label for="inductive-test-size">Αριθμός ερωτήσεων</label>
+                <select id="inductive-test-size" onchange="updateInductiveExamOptions()">
+                    <option value="7">7 ερωτήσεις</option>
+                    <option value="18" selected>18 ερωτήσεις (προεπιλογή)</option>
+                    <option value="25">25 ερωτήσεις</option>
+                </select>
+                <label class="exam-timer-choice" for="inductive-timed"><input type="checkbox" id="inductive-timed"><span><strong>Τεστ με χρονικό όριο</strong><small id="inductive-duration-hint">25 λεπτά, αν ενεργοποιηθεί</small></span></label>
+            </div>
+            <p class="muted" id="inductive-exam-distribution">18 ερωτήσεις χωρίς επανάληψη: 4 από τα επίπεδα 1–3, 10 από τα επίπεδα 4–7 και 4 από τα επίπεδα 8–10. Η δυσκολία δεν αλλάζει ανάλογα με τις απαντήσεις.</p>
+            <p class="muted">Μετά από κάθε απάντηση βλέπεις αν ήταν σωστή, μαζί με την επεξήγηση. Η συνολική βαθμολογία και η ανασκόπηση εμφανίζονται στο τέλος.</p>
         ` : `
             <label for="inductive-study-level">Επιλογή επιπέδου εκμάθησης</label>
             <select id="inductive-study-level">
@@ -1540,6 +1641,17 @@ function inductiveMenu(mode) {
     `;
 }
 
+// Ανανέωση χρόνου και κατανομής όταν αλλάζει ο αριθμός ερωτήσεων.
+function updateInductiveExamOptions() {
+    const size = Number(document.getElementById('inductive-test-size')?.value);
+    if (!INDUCTIVE_TEST_SIZES.includes(size)) return;
+    const hint = document.getElementById('inductive-duration-hint');
+    if (hint) hint.textContent = `${inductiveTimeMinutes(size)} λεπτά, αν ενεργοποιηθεί`;
+    const description = document.getElementById('inductive-exam-distribution');
+    const [easy, medium, hard] = INDUCTIVE_TIER_COUNTS[size];
+    if (description) description.textContent = `${size} ερωτήσεις χωρίς επανάληψη: ${easy} από τα επίπεδα 1–3, ${medium} από τα επίπεδα 4–7 και ${hard} από τα επίπεδα 8–10. Η δυσκολία δεν αλλάζει ανάλογα με τις απαντήσεις.`;
+}
+
 let inductiveStudyLevel = "all";
 async function startInductive() {
     if (!requireAccount()) return;
@@ -1551,11 +1663,23 @@ async function startInductive() {
         } finally { attemptPending = false; }
     }
     selectedInductiveTimed = inductiveMode === 'test' && document.getElementById('inductive-timed')?.checked === true;
+    inductiveTestLength = inductiveMode === 'test'
+        ? Number(document.getElementById('inductive-test-size')?.value || INDUCTIVE_TEST_LENGTH)
+        : INDUCTIVE_TEST_LENGTH;
+    if (!INDUCTIVE_TEST_SIZES.includes(inductiveTestLength)) {
+        alert('Επίλεξε 7, 18 ή 25 ερωτήσεις.');
+        return;
+    }
     inductiveResultLogged = false;
     activeTestId = null;
-    inductiveLevel = 3; // Οριστικό αρχικό επίπεδο για κάθε τεστ.
+    inductiveLevel = 3; // Χρησιμοποιείται μόνο στην παλιά μορφή αποθηκευμένων τεστ.
+    inductiveExamStyle = 'balanced';
+    inductiveExamQuestions = [];
+    inductiveExamAnswers = [];
     if (inductiveMode === "study") {
         currentStudyKind='inductive';
+        inductiveWrongIds = new Set();
+        inductiveStudyReviewActive = false;
         const value = document.getElementById("inductive-study-level").value;
         inductiveStudyLevel = value === "all" ? "all" : Number(value);
     }
@@ -1564,10 +1688,17 @@ async function startInductive() {
     inductiveTotal = 0;
     inductiveActiveTest = inductiveMode === 'test';
     if (inductiveActiveTest) {
-        const initial=pickNextInductive();
-        if (!initial) {alert('Δεν υπάρχουν διαθέσιμα σχήματα.');return;}
-        inductiveCurrent=initial; inductiveSeen.add(initial.id); inductiveSelected=null; inductiveAnswered=false;
-        const payload={id:newTestId(),type:'inductive',questionIds:[initial.id],answers:[],position:0,level:inductiveLevel,correct:0,total:0,currentId:initial.id,selected:null,answered:false,timed:selectedInductiveTimed};
+        try { inductiveExamQuestions = selectBalancedInductiveQuestions(inductiveTestLength); }
+        catch (error) { alert('Δεν είναι δυνατό να δημιουργηθεί το τεστ: ' + error.message); return; }
+        inductiveExamAnswers = Array(inductiveTestLength).fill(null);
+        inductiveCurrent = inductiveExamQuestions[0];
+        inductiveLevel = inductiveCurrent.level;
+        inductiveSeen.add(inductiveCurrent.id);
+        inductiveSelected = null; inductiveAnswered = false;
+        const payload={id:newTestId(),type:'inductive',
+            questionIds:inductiveExamQuestions.map(q=>q.id), answers:[...inductiveExamAnswers],
+            position:0, level:inductiveLevel, correct:0, total:0,
+            currentId:inductiveCurrent.id, selected:null, answered:false, timed:selectedInductiveTimed};
         try {
             const result=await window.StoxosFirebase.beginAttempt(payload, true);
             if (!result.allowed) {showPricing('Έχεις ολοκληρώσει και τα 5 δωρεάν τεστ.');return;}
@@ -1583,6 +1714,31 @@ async function startInductive() {
     } else nextInductiveQuestion();
 }
 
+// Σταθερή κατανομή δυσκολίας, με προτίμηση σε διαφορετικές μορφές
+// ασκήσεων μέσα σε κάθε βαθμίδα. Δεν είναι ψυχομετρικά βαθμονομημένο CAT.
+function selectBalancedInductiveQuestions(size = inductiveTestLength, bank = inductiveBank()) {
+    if (!INDUCTIVE_TEST_SIZES.includes(size)) throw Error('Μη έγκυρος αριθμός ερωτήσεων.');
+    const [easy, medium, hard] = INDUCTIVE_TIER_COUNTS[size];
+    const tiers = [{min:1, max:3, count:easy}, {min:4, max:7, count:medium}, {min:8, max:10, count:hard}];
+    const selected = [];
+    const typeCounts = new Map();
+    tiers.forEach(tier => {
+        const pool = shuffle(bank.filter(q => q.level >= tier.min && q.level <= tier.max));
+        if (pool.length < tier.count) {
+            throw Error(`Δεν υπάρχουν αρκετές ασκήσεις για τα επίπεδα ${tier.min}–${tier.max}.`);
+        }
+        for (let i = 0; i < tier.count; i++) {
+            const minimum = Math.min(...pool.map(q => typeCounts.get(q.type) || 0));
+            const chosenIndex = pool.findIndex(q => (typeCounts.get(q.type) || 0) === minimum);
+            const [question] = pool.splice(chosenIndex, 1);
+            selected.push(question);
+            typeCounts.set(question.type, (typeCounts.get(question.type) || 0) + 1);
+        }
+    });
+    return shuffle(selected);
+}
+
+// Χρησιμοποιείται μόνο στην εκμάθηση και στις παλιές ημιτελείς προσπάθειες.
 function pickNextInductive() {
     const remaining=inductiveBank().filter(q=>!inductiveSeen.has(q.id) && (inductiveMode === 'test' || inductiveStudyLevel === 'all' || q.level === inductiveStudyLevel));
     if (!remaining.length) return null;
@@ -1590,50 +1746,141 @@ function pickNextInductive() {
     const candidates=inductiveMode === 'study' ? remaining : remaining.filter(q=>Math.abs(q.level-inductiveLevel)===minDistance);
     return candidates[Math.floor(Math.random()*candidates.length)];
 }
+// Νέος γύρος εκμάθησης μόνο με τις ασκήσεις που απαντήθηκαν λανθασμένα.
+function repeatWrongInductive() {
+    if (inductiveMode !== 'study' || !inductiveWrongIds.size || !authIdentity()) return;
+    inductiveStudyReviewActive = true;
+    currentStudyKind = 'inductive';
+    inductiveSeen = new Set();
+    inductiveTotal = 0;
+    inductiveCorrect = 0;
+    inductiveSelected = null;
+    inductiveAnswered = false;
+    nextInductiveQuestion();
+}
+
+// Συγκεντρωτική ανασκόπηση στο τέλος του τεστ, επιπλέον του άμεσου ελέγχου κάθε απάντησης.
+function inductiveExamReviewHtml() {
+    if (inductiveExamStyle !== 'balanced') return '';
+    return `<section class="inductive-exam-review" aria-label="Ανασκόπηση ασκήσεων">
+        <h2>Ανασκόπηση και επεξηγήσεις</h2>
+        <p class="muted">Άνοιξε κάθε άσκηση για να δεις τον κανόνα και τη σωστή απάντηση.</p>
+        ${inductiveExamQuestions.map((q, index) => {
+            const choice = inductiveExamAnswers[index];
+            const isCorrect = choice === q.correct;
+            const answered = Number.isInteger(choice);
+            const status = !answered ? 'Αναπάντητη' : isCorrect ? 'Σωστή' : 'Λανθασμένη';
+            const statusClass = !answered ? 'is-unanswered' : isCorrect ? 'is-correct' : 'is-incorrect';
+            const renderFrame = f => inductiveSvgFrame(f && q.type === 'logic-matrix' ? {...f, draw:q.draw} : f);
+            const shapeClass = q.type === 'count-matrix' ? 'inductive-matrix-four' :
+                q.type === 'logic-matrix' || q.type === 'matrix' ? 'inductive-matrix' : '';
+            return `<details class="inductive-review-card">
+                <summary><span class="inductive-review-index">${index + 1}.</span>
+                    <span>Άσκηση ${escapeHtml(q.id)} <small>Επίπεδο ${q.level}/10</small></span>
+                    <span class="inductive-review-status ${statusClass}">${status}</span></summary>
+                <div class="inductive-review-content">
+                    <div class="inductive-review-scroll"><div class="inductive-sequence ${shapeClass}">${q.sequence.map(renderFrame).map(svg => `<div class="inductive-frame">${svg}</div>`).join('')}</div></div>
+                    <div class="inductive-review-answers">
+                        <span>Η απάντησή σου: <strong>${answered ? INDUCTIVE_LETTERS[choice] : 'Δεν απαντήθηκε'}</strong></span>
+                        <span>Σωστή επιλογή: <strong>${INDUCTIVE_LETTERS[q.correct]}</strong></span>
+                        <div class="inductive-review-correct-shape">${renderFrame(q.options[q.correct])}</div>
+                    </div>
+                    <p>${escapeHtml(q.explanation)}</p>
+                </div>
+            </details>`;
+        }).join('')}
+    </section>`;
+}
+
+async function finishInductiveSimulation(expired = false) {
+    if (!inductiveActiveTest || resultSaving || inductiveResultLogged || !activeTestId) return;
+    if (!await flushProgress()) return;
+    const answered = inductiveTotal;
+    if (!await saveTestResult('inductive', inductiveCorrect, inductiveTestLength)) return;
+    inductiveResultLogged = true;
+    inductiveActiveTest = false;
+    app.innerHTML = `<section class="inductive-exam-result">
+        <p class="home-kicker">${expired ? 'ΛΗΞΗ ΧΡΟΝΟΥ' : 'ΟΛΟΚΛΗΡΩΣΗ ΤΕΣΤ'}</p>
+        <h1>${expired ? 'Ο χρόνος έληξε' : 'Αποτέλεσμα τεστ'}</h1>
+        <div class="inductive-exam-score"><strong>${Math.round(100 * inductiveCorrect / inductiveTestLength)}%</strong>
+            <span>${inductiveCorrect} / ${inductiveTestLength} σωστές</span></div>
+        <p class="muted">Απαντήθηκαν ${answered} από τις ${inductiveTestLength} ερωτήσεις.${expired ? ' Οι υπόλοιπες μετρήθηκαν ως αναπάντητες.' : ''}</p>
+        <div class="actions"><button onclick="home()">Αρχική</button>
+            <button class="secondary" onclick="openInsights()">Η πρόοδός μου</button></div>
+        ${inductiveExamReviewHtml()}
+        <div class="actions"><button class="secondary" onclick="inductiveMenu('test')">Νέο τεστ</button></div>
+    </section>`;
+}
+
 async function finishExpiredInductive() {
+    if (inductiveExamStyle === 'balanced') return finishInductiveSimulation(true);
     if (!inductiveActiveTest || resultSaving || inductiveResultLogged || !activeTestId) return;
     if (!await flushProgress()) return;
     const attempted = inductiveTotal;
-    if (!await saveTestResult('inductive', inductiveCorrect, INDUCTIVE_TEST_LENGTH)) return;
+    if (!await saveTestResult('inductive', inductiveCorrect, inductiveTestLength)) return;
     inductiveResultLogged = true;
     inductiveActiveTest = false;
     app.innerHTML = `<section class="exam-time-result">
         <p class="home-kicker">ΟΛΟΚΛΗΡΩΣΗ ΧΡΟΝΟΥ</p><h1>Ο χρόνος έληξε</h1>
-        <h2>${inductiveCorrect} / ${INDUCTIVE_TEST_LENGTH} σωστές · ${Math.round(100*inductiveCorrect/INDUCTIVE_TEST_LENGTH)}%</h2>
-        <p class="muted">Απαντήθηκαν ${attempted} από τις ${INDUCTIVE_TEST_LENGTH} ερωτήσεις. Οι υπόλοιπες καταχωρίστηκαν ως αναπάντητες.</p>
+        <h2>${inductiveCorrect} / ${inductiveTestLength} σωστές · ${Math.round(100*inductiveCorrect/inductiveTestLength)}%</h2>
+        <p class="muted">Απαντήθηκαν ${attempted} από τις ${inductiveTestLength} ερωτήσεις. Οι υπόλοιπες καταχωρίστηκαν ως αναπάντητες.</p>
         <div class="actions"><button onclick="home()">Αρχική</button><button class="secondary" onclick="openInsights()">Αναλυτική πρόοδος</button></div></section>`;
 }
 async function nextInductiveQuestion() {
     if (inductiveActiveTest && examTimeExpired()) {expireTimedTest();return;}
     if (inductiveActiveTest && !await flushProgress()) return;
     if (resultSaving) return;
-    const remaining = inductiveBank().filter(q => !inductiveSeen.has(q.id) && (inductiveMode === "test" || inductiveStudyLevel === "all" || q.level === inductiveStudyLevel));
-    const reachedLimit = inductiveMode === "test" && inductiveTotal >= INDUCTIVE_TEST_LENGTH;
+
+    // Νέο τεστ: οι επιλεγμένες 7/18/25 ερωτήσεις έχουν οριστεί στην έναρξη. Δεν προσαρμόζουμε επίπεδο.
+    if (inductiveActiveTest && inductiveExamStyle === 'balanced') {
+        if (!inductiveAnswered) return;
+        if (inductiveTotal >= inductiveTestLength) {
+            await finishInductiveSimulation();
+            return;
+        }
+        inductiveCurrent = inductiveExamQuestions[inductiveTotal];
+        inductiveLevel = inductiveCurrent.level;
+        inductiveSeen.add(inductiveCurrent.id);
+        inductiveSelected = null;
+        inductiveAnswered = false;
+        await queueAttemptSave();
+        showInductive();
+        refreshExamTimer();
+        return;
+    }
+
+    // Εκμάθηση ανά επίπεδο και συμβατότητα με παλιές ημιτελείς προσαρμοστικές προσπάθειες.
+    const remaining = inductiveBank().filter(q => !inductiveSeen.has(q.id) &&
+        (inductiveMode === 'test' || inductiveStudyLevel === 'all' || q.level === inductiveStudyLevel) &&
+        (inductiveMode !== 'study' || !inductiveStudyReviewActive || inductiveWrongIds.has(q.id)));
+    const reachedLimit = inductiveMode === 'test' && inductiveTotal >= inductiveTestLength;
     if (reachedLimit || !remaining.length) {
         if (inductiveMode === 'test' && !inductiveResultLogged && inductiveTotal > 0) {
             if (!await saveTestResult('inductive', inductiveCorrect, inductiveTotal)) return;
             inductiveResultLogged = true;
         }
-        if (inductiveMode === 'study') finishStudyProgress('inductive');
+        const wrongCount = inductiveMode === 'study' ? inductiveWrongIds.size : 0;
+        // Όσο υπάρχουν λάθη, κρατάμε την πρόοδο για επανάληψη ακόμη και μετά από επανασύνδεση.
+        if (inductiveMode === 'study' && wrongCount === 0) finishStudyProgress('inductive');
         app.innerHTML = `
-            <h1>Ολοκλήρωση ${inductiveMode === "test" ? "τεστ" : "εκμάθησης"}</h1>
+            <h1>Ολοκλήρωση ${inductiveMode === 'test' ? 'τεστ' : 'εκμάθησης'}</h1>
             <h2>${inductiveCorrect} / ${inductiveTotal} σωστές</h2>
-            ${reachedLimit ? `<p class="muted">Ολοκληρώθηκαν και οι ${INDUCTIVE_TEST_LENGTH} ερωτήσεις του τεστ.</p><p class="muted">Ποσοστό επιτυχίας: ${Math.round(100 * inductiveCorrect / inductiveTotal)}%</p>` : `<p class="muted">Ολοκληρώθηκαν όλες οι διαθέσιμες ερωτήσεις χωρίς επανάληψη.</p>`}
+            ${reachedLimit ? `<p class="muted">Ολοκληρώθηκαν και οι ${inductiveTestLength} ερωτήσεις του τεστ.</p><p class="muted">Ποσοστό επιτυχίας: ${Math.round(100 * inductiveCorrect / inductiveTotal)}%</p>` : `<p class="muted">Ολοκληρώθηκαν όλες οι διαθέσιμες ερωτήσεις του γύρου.</p>`}
+            ${inductiveMode === 'study' ? `<p class="muted">Ασκήσεις που χρειάζονται επανάληψη: <strong>${wrongCount}</strong>.</p>` : ''}
             <div class="actions"><button class="secondary" onclick="home()">Αρχική</button>
+            ${wrongCount ? '<button onclick="repeatWrongInductive()">Επανάληψη λαθών</button>' : ''}
             ${inductiveMode === 'test' ? '<button class="secondary" onclick="openInsights()">Αναλυτική πρόοδος</button>' : ''}
-            <button onclick="inductiveMenu('${inductiveMode}')">Νέα προσπάθεια</button></div>
-        `;
+            <button onclick="inductiveMenu('${inductiveMode}')">Νέα προσπάθεια</button></div>`;
         return;
     }
-    // Επιλογή από το πλησιέστερο διαθέσιμο επίπεδο.
     const minDistance = Math.min(...remaining.map(q => Math.abs(q.level - inductiveLevel)));
-    const candidates = inductiveMode === "study" ? remaining : remaining.filter(q => Math.abs(q.level - inductiveLevel) === minDistance);
+    const candidates = inductiveMode === 'study' ? remaining : remaining.filter(q => Math.abs(q.level - inductiveLevel) === minDistance);
     inductiveCurrent = candidates[Math.floor(Math.random() * candidates.length)];
     inductiveSeen.add(inductiveCurrent.id);
     inductiveSelected = null;
     inductiveAnswered = false;
     if (inductiveActiveTest) await queueAttemptSave();
-    else if (inductiveMode==='study') saveStudyProgress('inductive');
+    else if (inductiveMode === 'study') saveStudyProgress('inductive');
     showInductive();
 }
 
@@ -1699,17 +1946,33 @@ function inductiveSvgFrame(frame) {
     return `<svg viewBox="0 0 140 140" role="img" aria-label="Γεωμετρικό σχήμα">${outline}${parts}</svg>`;
 }
 
+// Συμπαγείς επιλογές εξ ορισμού σε όλες τις συσκευές. Η μεγέθυνση παραμένει προαιρετική.
+let inductiveLargeOptions = false;
+function toggleInductiveOptionsSize() {
+    inductiveLargeOptions = !inductiveLargeOptions;
+    const options = document.getElementById('inductive-answer-options');
+    const toggle = document.getElementById('inductive-view-toggle');
+    if (options) options.classList.toggle('inductive-options-large', inductiveLargeOptions);
+    if (toggle) {
+        toggle.setAttribute('aria-pressed', String(inductiveLargeOptions));
+        toggle.textContent = inductiveLargeOptions ? 'Συμπαγής προβολή' : 'Μεγάλες επιλογές';
+    }
+}
+
 function showInductive() {
     const q = inductiveCurrent;
     const renderFrame = f => inductiveSvgFrame(f && q.type === "logic-matrix" ? {...f, draw:q.draw} : f);
     app.innerHTML = `
-        <p class="muted">Επαγωγικός Συλλογισμός · ${inductiveMode === "test" ? "Τεστ" : `Εκμάθηση · Επίπεδο ${q.level}/10`}</p>
-        <p class="muted">Ερώτηση ${inductiveTotal + 1}${inductiveMode === "test" ? ` / ${INDUCTIVE_TEST_LENGTH}` : ""} · ${escapeHtml(q.id)}</p>
+        <p class="muted">Επαγωγικός Συλλογισμός · ${inductiveMode === "test" ? "Τεστ" : `${inductiveStudyReviewActive ? 'Επανάληψη λαθών' : 'Εκμάθηση'} · Επίπεδο ${q.level}/10`}</p>
+        <p class="muted">Ερώτηση ${inductiveTotal + 1}${inductiveMode === "test" ? ` / ${inductiveTestLength}` : ""} · ${escapeHtml(q.id)}</p>
         ${inductiveActiveTest ? examTimerHtml() : ''}
         <h2>Ποιο σχήμα λείπει;</h2>
         <div class="inductive-sequence ${q.type === "matrix" ? "inductive-matrix" : q.type === "count-matrix" ? "inductive-matrix-four" : q.type === "logic-matrix" ? "inductive-matrix" : ""}">${q.sequence.map(renderFrame).map(s => `<div class="inductive-frame">${s}</div>`).join("")}</div>
-        <h3>Απαντήσεις</h3>
-        <div class="inductive-options">${q.options.map((f,i) => `
+        ${q.type === 'count-matrix' && q.rules?.mode ? '<p class="inductive-zero-note">Ένα άδειο πλαίσιο αντιστοιχεί σε 0 κύκλους.</p>' : ''}
+        <div class="inductive-answer-tools"><h3>Απαντήσεις</h3>
+            <button type="button" class="secondary inductive-view-toggle" id="inductive-view-toggle"
+                onclick="toggleInductiveOptionsSize()" aria-pressed="${inductiveLargeOptions}">${inductiveLargeOptions ? 'Συμπαγής προβολή' : 'Μεγάλες επιλογές'}</button></div>
+        <div class="inductive-options ${inductiveLargeOptions ? 'inductive-options-large' : ''}" id="inductive-answer-options">${q.options.map((f,i) => `
             <button class="inductive-option" id="inductive-option-${i}" onclick="chooseInductive(${i})" aria-label="Επιλογή ${INDUCTIVE_LETTERS[i]}" aria-pressed="false">
                 ${renderFrame(f)}<strong>${INDUCTIVE_LETTERS[i]}</strong>
             </button>`).join("")}</div>
@@ -1739,8 +2002,16 @@ function checkInductive() {
     inductiveTotal++;
     const correct = inductiveSelected === inductiveCurrent.correct;
     if (correct) inductiveCorrect++;
-    // Μεταβολή στόχου κατά ένα επίπεδο, εντός 1-10.
-    if (inductiveMode === "test") inductiveLevel = Math.max(1, Math.min(10, inductiveLevel + (correct ? 1 : -1)));
+    if (inductiveMode === 'study') {
+        if (correct) inductiveWrongIds.delete(inductiveCurrent.id);
+        else inductiveWrongIds.add(inductiveCurrent.id);
+    }
+    if (inductiveActiveTest && inductiveExamStyle === 'balanced') {
+        inductiveExamAnswers[inductiveTotal - 1] = inductiveSelected;
+    } else if (inductiveMode === 'test') {
+        // Μόνο για παλιές αποθηκευμένες προσαρμοστικές προσπάθειες.
+        inductiveLevel = Math.max(1, Math.min(10, inductiveLevel + (correct ? 1 : -1)));
+    }
     showInductiveFeedback();
     if (inductiveActiveTest) queueAttemptSave();
     else if (inductiveMode==='study') saveStudyProgress('inductive');
@@ -1757,10 +2028,10 @@ function showInductiveFeedback() {
         <div class="inductive-feedback ${correct ? "inductive-success" : "inductive-error"}">
             <strong>${correct ? "Σωστά!" : `Η σωστή απάντηση είναι η ${INDUCTIVE_LETTERS[inductiveCurrent.correct]}.`}</strong>
             <p>${escapeHtml(inductiveCurrent.explanation)}</p>
-            ${inductiveMode === "test" && inductiveTotal < INDUCTIVE_TEST_LENGTH ? `<p class="muted">Επόμενος στόχος δυσκολίας: ${inductiveLevel}/10 (εφόσον υπάρχουν διαθέσιμες ερωτήσεις).</p>` : ""}
+            ${inductiveMode === "test" && inductiveExamStyle === 'legacy' && inductiveTotal < inductiveTestLength ? `<p class="muted">Επόμενος στόχος δυσκολίας: ${inductiveLevel}/10 (εφόσον υπάρχουν διαθέσιμες ερωτήσεις).</p>` : ""}
         </div>`;
     const button = document.getElementById("inductive-check");
-    button.textContent = inductiveMode === "test" && inductiveTotal >= INDUCTIVE_TEST_LENGTH ? "Προβολή αποτελεσμάτων" : "Επόμενη ερώτηση";
+    button.textContent = inductiveMode === "test" && inductiveTotal >= inductiveTestLength ? "Προβολή αποτελεσμάτων" : "Επόμενη ερώτηση";
     button.disabled = false;
     button.onclick = nextInductiveQuestion;
 }

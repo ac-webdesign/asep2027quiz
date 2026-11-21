@@ -24,8 +24,8 @@ service cloud.firestore {
         && d.answers is list && d.answers.size() <= 50
         && d.position is int && d.position >= 0 && d.position < 50
         && d.level is int && d.level >= 0 && d.level <= 10
-        && d.correct is int && d.correct >= 0 && d.correct <= 18
-        && d.total is int && d.total >= 0 && d.total <= 18
+        && d.correct is int && d.correct >= 0 && d.correct <= 25
+        && d.total is int && d.total >= 0 && d.total <= 25 && d.correct <= d.total
         && d.currentId is string && d.currentId.size() <= 30
         && (d.selected == null || (d.selected is int && d.selected >= 0 && d.selected < 5))
         && d.answered is bool && d.updatedAt == request.time
@@ -33,7 +33,7 @@ service cloud.firestore {
         && (!('startedAt' in d) || d.startedAt is timestamp)
         && (d.get('timed',false) != true || 'startedAt' in d)
         && ((d.type == 'knowledge' && d.questionIds.size() in [10,25,50] && d.answers.size() == d.questionIds.size() && d.position < d.questionIds.size() && d.level == 0 && d.total == 0 && d.correct == 0 && d.currentId == '')
-          || (d.type == 'inductive' && d.questionIds.size() <= 18 && d.answers.size() == 0 && d.position == 0 && d.level >= 1 && d.currentId.size() > 0));
+          || (d.type == 'inductive' && d.level >= 1 && d.currentId.size() > 0 && ((d.answers.size() == 0 && d.questionIds.size() <= 18 && d.position == 0) || (d.questionIds.size() in [7,18,25] && d.answers.size() == d.questionIds.size() && d.position < d.questionIds.size()))));
     }
     function count11(v) {
       return v is list && v.size() == 11
@@ -58,11 +58,11 @@ service cloud.firestore {
         && d.keys().hasAll(['type', 'correct', 'total', 'at'])
         && d.type in ['knowledge', 'inductive']
         && d.correct is int && d.total is int
-        && ((d.type == 'knowledge' && d.total in [10,25,50]) || (d.type == 'inductive' && d.total == 18))
+        && ((d.type == 'knowledge' && d.total in [10,25,50]) || (d.type == 'inductive' && d.total in [7,18,25]))
         && d.correct >= 0 && d.correct <= d.total && d.at == request.time
         && (!('timed' in d) || d.timed is bool)
         && (!('elapsedSeconds' in d) || (d.elapsedSeconds is int && d.elapsedSeconds >= 0
-          && d.elapsedSeconds <= (d.type == 'knowledge' ? d.total * 60 : 1500)))
+          && d.elapsedSeconds <= (d.type == 'knowledge' ? d.total * 60 : (d.total == 7 ? 600 : (d.total == 18 ? 1500 : 2100)))))
         // Παλιοί clients: επιτρέπουμε το αρχικό αποτέλεσμα χωρίς ανάλυση.
         && ((!('categoryCorrect' in d) && !('categoryTotal' in d))
           || ('categoryCorrect' in d && 'categoryTotal' in d
@@ -92,7 +92,8 @@ service cloud.firestore {
         && d.inductiveCorrect <= d.inductiveTotal
         && d.knowledgeTotal >= d.knowledgeTests * 10
         && d.knowledgeTotal <= d.knowledgeTests * 50
-        && d.inductiveTotal == d.inductiveTests * 18
+        && d.inductiveTotal >= d.inductiveTests * 7
+        && d.inductiveTotal <= d.inductiveTests * 25
         && count11(d.categoryCorrect) && count11(d.categoryTotal)
         && lessEqual11(d.categoryCorrect, d.categoryTotal)
         && sum11(d.categoryCorrect) == d.knowledgeCorrect
@@ -128,15 +129,18 @@ service cloud.firestore {
         allow get: if signed(uid) && kind in ['knowledge','inductive'];
         allow list: if false;
         allow create, update: if signed(uid) && kind in ['knowledge','inductive']
-          && request.resource.data.keys().hasOnly(['category','questionId','position','level','seenIds','correct','total','selected','answered','updatedAt'])
+          && request.resource.data.keys().hasOnly(['category','questionId','position','level','seenIds','wrongIds','reviewMode','correct','total','selected','answered','updatedAt'])
           && request.resource.data.keys().hasAll(['category','questionId','position','level','seenIds','correct','total','selected','answered','updatedAt'])
           && request.resource.data.category is string && request.resource.data.category.size() <= 160
           && request.resource.data.questionId is string && request.resource.data.questionId.size() <= 40
           && request.resource.data.position is int && request.resource.data.position >= 0 && request.resource.data.position <= 25000
           && request.resource.data.level is int && request.resource.data.level >= 0 && request.resource.data.level <= 10
-          && request.resource.data.seenIds is list && request.resource.data.seenIds.size() <= 100
-          && request.resource.data.correct is int && request.resource.data.correct >= 0 && request.resource.data.correct <= 100
-          && request.resource.data.total is int && request.resource.data.total >= 0 && request.resource.data.total <= 100
+          && request.resource.data.seenIds is list && request.resource.data.seenIds.size() <= 200
+          && (!('wrongIds' in request.resource.data) ||
+              (request.resource.data.wrongIds is list && request.resource.data.wrongIds.size() <= 200))
+          && (!('reviewMode' in request.resource.data) || request.resource.data.reviewMode is bool)
+          && request.resource.data.correct is int && request.resource.data.correct >= 0 && request.resource.data.correct <= 200
+          && request.resource.data.total is int && request.resource.data.total >= 0 && request.resource.data.total <= 200
           && (request.resource.data.selected == null || (request.resource.data.selected is int && request.resource.data.selected >= 0 && request.resource.data.selected <= 4))
           && request.resource.data.answered is bool
           && request.resource.data.updatedAt == request.time
